@@ -135,3 +135,81 @@ test("CLI refuses incomplete arguments and never creates files",t=>{
     assert.throws(()=>statSync(join(dir,file)),{code:"ENOENT"});
   }
 });
+
+
+test("workers.dev staging uses exact account-assigned Worker hostnames, no public routes",()=>{
+  const {zone,...rest}=sample;
+  const configs=buildConfigs({...rest,workersSubdomain:"sample-staging"});
+  const {auth,mcp,setup}=configs;
+  assert.equal(verifyConfigs(configs),true);
+  assert.equal(auth.vars.AUTH_ISSUER,"https://google-master-auth.sample-staging.workers.dev");
+  assert.equal(auth.vars.MCP_RESOURCE_URL,"https://google-master-mcp.sample-staging.workers.dev/mcp");
+  assert.equal(setup.vars.SETUP_ORIGIN,
+    "https://google-master-workspace-setup.sample-staging.workers.dev");
+  assert.equal(setup.vars.GOOGLE_WORKSPACE_REDIRECT_URI,
+    "https://google-master-workspace-setup.sample-staging.workers.dev/oauth/google/callback");
+  assert.equal(mcp.vars.GOOGLE_WORKSPACE_REDIRECT_URI,
+    setup.vars.GOOGLE_WORKSPACE_REDIRECT_URI);
+  assert.deepEqual(mcp.services,[{binding:"AUTH_SERVER",service:auth.name}]);
+  assert.deepEqual(mcp.d1_databases,setup.d1_databases);
+  for(const item of Object.values(configs)){
+    assert.equal(item.workers_dev,false);
+    assert.equal(item.preview_urls,false);
+    assert.equal(item.routes,undefined);
+    assert.equal(item.route,undefined);
+  }
+  assert.equal(mcp.vars.GMW_WORKSPACE_READS_ENABLED,"false");
+  assert.equal(mcp.vars.GMW_ALLOWED_BROWSER_ORIGINS,"");
+});
+
+test("workers.dev staging refuses inappropriate subdomains, confused modes and activated routes",()=>{
+  const {zone,...rest}=sample;
+  for(const subdomain of [
+    "workers.dev","myaccount.workers.dev","HTTPS://WORKERS.DEV",
+    "MyAccount","bad..label","bad_label","-myaccount","example",
+    "a".repeat(64),"127.0.0.1","","test"
+  ]) {
+    assert.throws(()=>buildConfigs({...rest,workersSubdomain:subdomain}),
+      /Invalid or missing --workers-subdomain/);
+  }
+  assert.throws(()=>buildConfigs({...sample,zone:"myaccount.workers.dev"}),
+    /Invalid or missing --zone/);
+  assert.throws(()=>buildConfigs({...sample,workersSubdomain:"myaccount"}),
+    /either --zone or --workers-subdomain/);
+  const configs=buildConfigs({...rest,workersSubdomain:"sample-staging"});
+  const activated=clone(configs);
+  activated.auth.workers_dev=true;
+  assert.throws(()=>verifyConfigs(activated),/nonpublic/);
+  const mismatch=clone(configs);
+  mismatch.setup.vars.SETUP_ORIGIN="https://setup.example.com";
+  assert.throws(()=>verifyConfigs(mismatch),/OAuth origins/);
+});
+
+test("CLI workers.dev mode creates the same protected files and validates without Cloudflare",t=>{
+  const dir=mkdtempSync(join(tmpdir(),"gmw-workerdev-test-"));
+  t.after(()=>rmSync(dir,{recursive:true,force:true}));
+  const script=resolve("scripts/prepare-cloudflare.mjs");
+  const {zone,...rest}=sample;
+  const args=[
+    "--workers-subdomain","sample-staging",
+    "--kv-id",rest.kvId,
+    "--d1-id",rest.d1Id,
+    "--db-name",rest.dbName,
+    "--auth-rate-id",rest.authRateId,
+    "--setup-rate-id",rest.setupRateId
+  ];
+  const response=spawnSync(process.execPath,[script,...args],{
+    cwd:dir,encoding:"utf8"
+  });
+  assert.equal(response.status,0,response.stderr);
+  assert(response.stdout.includes("google-master-mcp.sample-staging.workers.dev/mcp"));
+  assert(response.stdout.includes("workers_dev=false"));
+  for(const file of Object.values(OUTPUT_FILES)){
+    const path=join(dir,file);
+    assert.equal(statSync(path).mode & 0o077,0);
+  }
+  const verify=spawnSync(process.execPath,[script,"--verify"],{
+    cwd:dir,encoding:"utf8"
+  });
+  assert.equal(verify.status,0,verify.stderr);
+});

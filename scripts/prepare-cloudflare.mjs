@@ -32,6 +32,9 @@ function validateZone(value) {
     if (!text || text !== text.toLowerCase() ||
         text.length > 253 || text.includes("://") ||
         text.startsWith(".") || text.endsWith(".")) return false;
+    // Workers.dev is an account-assigned host, not a custom zone.
+    // Its hostname layout is worker.account.workers.dev, not auth.account...
+    if (text.endsWith(".workers.dev")) return false;
     const labels = text.split(".");
     if (labels.length < 2) return false;
     if (labels.some(label => !DOMAIN_LABEL.test(label))) return false;
@@ -40,6 +43,14 @@ function validateZone(value) {
       !["test","invalid","localhost","example"].includes(labels.at(-1));
   });
   return zone;
+}
+function validateWorkersSubdomain(value) {
+  return required(value, "--workers-subdomain", text =>
+    DOMAIN_LABEL.test(text) && text.length <= 63 &&
+    text !== "example" && text !== "workers" &&
+    text !== "localhost" && text !== "test" &&
+    text.toLowerCase() === text && !text.includes(".")
+  );
 }
 function positiveIntegerString(value) {
   return /^[1-9][0-9]{0,9}$/.test(value ?? "") &&
@@ -52,6 +63,16 @@ function derived(root) {
     mcpResource: "https://mcp." + root + "/mcp",
     setupOrigin: "https://setup." + root,
     setupRedirect: "https://setup." + root + "/oauth/google/callback"
+  };
+}
+function derivedWorkers(subdomain) {
+  const suffix = "." + subdomain + ".workers.dev";
+  return {
+    authOrigin: "https://google-master-auth" + suffix,
+    mcpResource: "https://google-master-mcp" + suffix + "/mcp",
+    setupOrigin: "https://google-master-workspace-setup" + suffix,
+    setupRedirect: "https://google-master-workspace-setup" + suffix +
+      "/oauth/google/callback"
   };
 }
 function common(name, main, flags = ["nodejs_compat"]) {
@@ -67,7 +88,12 @@ function limiter(name, namespaceId, limit) {
   return [{name, namespace_id: namespaceId, simple:{limit,period:60}}];
 }
 export function buildConfigs(raw) {
-  const zone = validateZone(raw.zone);
+  if (raw.zone !== undefined && raw.workersSubdomain !== undefined) {
+    throw new Error("Use either --zone or --workers-subdomain, not both.");
+  }
+  const urls = raw.workersSubdomain !== undefined
+    ? derivedWorkers(validateWorkersSubdomain(raw.workersSubdomain))
+    : derived(validateZone(raw.zone));
   const kvId = required(raw.kvId, "--kv-id", s => KV_ID.test(s));
   const d1Id = required(raw.d1Id, "--d1-id", s => D1_ID.test(s));
   const dbName = required(raw.dbName, "--db-name", s => UPPER_NAME.test(s));
@@ -76,7 +102,6 @@ export function buildConfigs(raw) {
   if (authRateId === setupRateId) {
     throw new Error("OAuth and setup rate limits must use distinct namespace IDs.");
   }
-  const urls = derived(zone);
   const database = [{
     binding: "DB", database_name: dbName, database_id: d1Id.toLowerCase(),
     migrations_dir: "migrations"
@@ -179,9 +204,10 @@ export function verifyConfigs(configs) {
   const mcpResource = auth.vars.MCP_RESOURCE_URL;
   const setupOrigin = setup.vars.SETUP_ORIGIN;
   try {
-    const actualZone = new URL(authOrigin).hostname.replace(/^auth\./,"");
-    validateZone(actualZone);
-    const urls = derived(actualZone);
+    const workersMatch = /^https:\/\/google-master-auth\.([a-z0-9-]+)\.workers\.dev$/.exec(authOrigin);
+    const urls = workersMatch
+      ? derivedWorkers(validateWorkersSubdomain(workersMatch[1]))
+      : derived(validateZone(new URL(authOrigin).hostname.replace(/^auth\./,"")));
     if (authOrigin !== urls.authOrigin || mcpResource !== urls.mcpResource ||
         mcp.vars.AUTH_ISSUER !== urls.authOrigin ||
         mcp.vars.MCP_RESOURCE_URL !== urls.mcpResource ||
@@ -199,13 +225,14 @@ export function verifyConfigs(configs) {
 
 function optionsFromArgv(argv) {
   const choices = new Map([
-    ["--zone","zone"],["--kv-id","kvId"],["--d1-id","d1Id"],
+    ["--zone","zone"],["--workers-subdomain","workersSubdomain"],
+    ["--kv-id","kvId"],["--d1-id","d1Id"],
     ["--db-name","dbName"],["--auth-rate-id","authRateId"],
     ["--setup-rate-id","setupRateId"]
   ]);
   if (argv.length === 1 && argv[0] === "--verify") return {verify:true};
   if (argv.includes("--help") || argv.includes("-h")) return {help:true};
-  if (argv.length !== choices.size * 2) {
+  if (argv.length !== 12) {
     throw Error("Provide all six named arguments; see --help.");
   }
   const result = {};
@@ -215,6 +242,9 @@ function optionsFromArgv(argv) {
       throw Error("Unknown or repeated argument: " + argv[i]);
     }
     result[name] = argv[i+1];
+  }
+  if (("zone" in result) === ("workersSubdomain" in result)) {
+    throw Error("Choose exactly one: --zone or --workers-subdomain.");
   }
   return result;
 }
@@ -227,7 +257,8 @@ function main(argv) {
     process.stdout.write(
       "Prepare NONPUBLIC Cloudflare configs. No Cloudflare operations.\n"+
       "node scripts/prepare-cloudflare.mjs \\\n"+
-      "  --zone <YOUR-OWNED-ZONE> --kv-id <32-hex-chars> \\\n"+
+      "  (--zone <YOUR-OWNED-ZONE> OR --workers-subdomain <ACCOUNT-SUBDOMAIN>) \\\n"+
+      "  --kv-id <32-hex-chars> \\\n"+
       "  --d1-id <D1-UUID> --db-name <D1-NAME> \\\n"+
       "  --auth-rate-id <UNIQUE-INTEGER> --setup-rate-id <OTHER-UNIQUE-INTEGER>\n"+
       "node scripts/prepare-cloudflare.mjs --verify\n"
@@ -263,7 +294,7 @@ function main(argv) {
     "Operator setup: "+configs.setup.vars.SETUP_ORIGIN+"\n"+
     "Workspace callback: "+configs.setup.vars.GOOGLE_WORKSPACE_REDIRECT_URI+"\n"+
     "Routes: NONE. workers_dev=false. preview_urls=false. Reads: DISABLED.\n"+
-    "Do not deploy yet. Follow docs/M9-CLOUDFLARE-CONFIG.md\n"
+    "Do not deploy yet. Follow docs/M12-WORKERS-DEV-STAGING.md\n"
   );
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
