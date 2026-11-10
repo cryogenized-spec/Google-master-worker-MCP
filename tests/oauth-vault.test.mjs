@@ -1,0 +1,231 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { DatabaseSync } from "node:sqlite";
+import { OperationError } from "../dist/packages/core/src/index.js";
+import {
+  importVaultKey, seal, unseal, encodeBase64Url
+} from "../dist/packages/google-auth/src/crypto.js";
+import { GoogleOAuthStore } from "../dist/packages/google-auth/src/store.js";
+import {
+  GoogleOAuthBroker
+} from "../dist/packages/google-auth/src/index.js";
+
+const requested = "https://www.googleapis.com/auth/tasks.readonly";
+const write = "https://www.googleapis.com/auth/tasks";
+const principal = { authenticated: true, accountId: "default", clientId: "trusted_client" };
+const secretKey = encodeBase64Url(crypto.getRandomValues(new Uint8Array(32)));
+const config = {
+  clientId: "test-id.apps.googleusercontent.com",
+  clientSecret: "FAKE_CLIENT_SECRET_NOT_FOR_PRODUCTION",
+  redirectUri: "https://worker.example.test/oauth/google/callback",
+  encryptionKeyBase64Url: secretKey
+};
+const migration = readFileSync(new URL("../migrations/0001_google_oauth_vault.sql", import.meta.url), "utf8");
+
+function fixture() {
+  const sqlite = new DatabaseSync(":memory:");
+  sqlite.exec(migration);
+  const db = {
+    prepare(sql) {
+      const statement = sqlite.prepare(sql);
+      return {
+        bind(...values) {
+          return {
+            async first() { return statement.get(...values) ?? null; },
+            async run() { return statement.run(...values); }
+          };
+        }
+      };
+    }
+  };
+  return { sqlite, store: new GoogleOAuthStore(db), close() { sqlite.close(); } };
+}
+function tokenReply(accessToken = "FAKE_ACCESS_TOKEN_THAT_IS_LONG", opts = {}) {
+  return new Response(JSON.stringify({
+    access_token: accessToken,
+    ...(opts.refreshToken === false ? {} :
+      { refresh_token: opts.refreshToken ?? "FAKE_REFRESH_TOKEN_THAT_IS_LONG" }),
+    expires_in: opts.expiresIn ?? 3600,
+    scope: opts.scope ?? requested,
+    token_type: "Bearer"
+  }), { status: opts.status ?? 200, headers: { "Content-Type": "application/json" } });
+}
+
+test("AES-256-GCM seals data and rejects tampering, swapped account and wrong key", async () => {
+  const key = await importVaultKey(secretKey);
+  const encrypted = await seal(key, "connection:default", { secret: "DO_NOT_LEAK" });
+  assert(!encrypted.includes("DO_NOT_LEAK"));
+  assert.deepEqual(await unseal(key, "connection:default", encrypted),
+    { secret: "DO_NOT_LEAK" });
+  await assert.rejects(unseal(key, "connection:other", encrypted), /CREDENTIAL_UNREADABLE/);
+  await assert.rejects(unseal(key, "connection:default", encrypted.slice(0, -1) + "Z"),
+    /CREDENTIAL_UNREADABLE/);
+  const wrongKey = await importVaultKey(
+    encodeBase64Url(crypto.getRandomValues(new Uint8Array(32))));
+  await assert.rejects(unseal(wrongKey, "connection:default", encrypted),
+    /CREDENTIAL_UNREADABLE/);
+  await assert.rejects(importVaultKey("not-a-32-byte-key"), /ENCRYPTION_NOT_CONFIGURED/);
+});
+
+test("authorization URL has PKCE S256 + offline consent; D1 stores no raw state/verifier", async t => {
+  const f = fixture(); t.after(f.close);
+  const broker = new GoogleOAuthBroker(f.store, config, async () => {
+    throw Error("Not called before redirect");
+  });
+  const result = await broker.begin(principal, [requested]);
+  const auth = new URL(result.authorizationUrl);
+  assert.equal(auth.origin, "https://accounts.google.com");
+  assert.equal(auth.searchParams.get("redirect_uri"), config.redirectUri);
+  assert.equal(auth.searchParams.get("response_type"), "code");
+  assert.equal(auth.searchParams.get("code_challenge_method"), "S256");
+  assert.equal(auth.searchParams.get("access_type"), "offline");
+  assert.equal(auth.searchParams.get("scope"), requested);
+  const state = auth.searchParams.get("state");
+  assert.equal(state.length, 43);
+  assert.equal(auth.searchParams.get("code_challenge").length, 43);
+  const pending = f.sqlite.prepare("SELECT * FROM google_oauth_pending").get();
+  assert.equal(pending.account_id, principal.accountId);
+  assert.equal(pending.client_id, principal.clientId);
+  assert.notEqual(pending.state_hash, state);
+  assert(!JSON.stringify(pending).includes(state));
+  assert(!pending.verifier_enc.includes("FAKE_CLIENT_SECRET"));
+  assert.equal(result.expiresAt > Date.now(), true);
+});
+
+test("callback consumes state once, exchanges code with PKCE, encrypts tokens, exposes only safe metadata", async t => {
+  const f = fixture(); t.after(f.close);
+  let exchanges = 0;
+  const broker = new GoogleOAuthBroker(f.store, config, async (url, options) => {
+    exchanges++;
+    assert.equal(url, "https://oauth2.googleapis.com/token");
+    assert.equal(options.method, "POST");
+    assert.equal(options.redirect, "error");
+    assert.equal(options.credentials, "omit");
+    const data = new URLSearchParams(options.body);
+    assert.equal(data.get("grant_type"), "authorization_code");
+    assert.equal(data.get("client_id"), config.clientId);
+    assert.equal(data.get("client_secret"), config.clientSecret);
+    assert.equal(data.get("redirect_uri"), config.redirectUri);
+    assert.match(data.get("code_verifier"), /^[A-Za-z0-9_-]{43,128}$/);
+    assert.equal(data.get("code"), "disposable-test-code");
+    return tokenReply();
+  });
+  const { authorizationUrl } = await broker.begin(principal, [requested]);
+  const state = new URL(authorizationUrl).searchParams.get("state");
+  const completed = await broker.complete(state, "disposable-test-code");
+  assert.deepEqual(completed.scopes, [requested]);
+  assert.equal(completed.accountId, "default");
+  assert.equal(completed.connected, true);
+  assert(!JSON.stringify(completed).includes("FAKE_"));
+  assert.equal(exchanges, 1);
+  assert.equal(f.sqlite.prepare("SELECT count(*) AS count FROM google_oauth_pending").get().count, 0);
+  const stored = f.sqlite.prepare("SELECT * FROM google_oauth_connections").get();
+  assert(!stored.tokens_enc.includes("FAKE_ACCESS_TOKEN"));
+  assert(!stored.tokens_enc.includes("FAKE_REFRESH_TOKEN"));
+  const session = await broker.get("default", "trusted_client");
+  assert.equal(session.accessToken, "FAKE_ACCESS_TOKEN_THAT_IS_LONG");
+  await assert.rejects(broker.complete(state, "disposable-test-code"),
+    /GOOGLE_OAUTH_STATE_EXPIRED_OR_USED/);
+  await assert.rejects(broker.begin(principal, [requested]),
+    /GOOGLE_ACCOUNT_ALREADY_CONNECTED/);
+  assert.equal(await broker.disconnectLocal("default"), true);
+  assert.equal(await broker.get("default", "trusted_client"), null);
+  assert.equal(await broker.disconnectLocal("default"), false);
+});
+
+test("callback cannot redeem expired state, unknown scope or a replayed state", async t => {
+  const f = fixture(); t.after(f.close);
+  let current = 1000000;
+  let httpCalls = 0;
+  const broker = new GoogleOAuthBroker(f.store, config, async () => {
+    httpCalls++;
+    return tokenReply();
+  }, () => current);
+  await assert.rejects(broker.begin(principal, ["https://www.googleapis.com/auth/drive"]),
+    /GOOGLE_SCOPES_INVALID/);
+  await assert.rejects(broker.begin({ ...principal, authenticated: false }, [requested]),
+    /CLIENT_UNAUTHORIZED/);
+  const { authorizationUrl } = await broker.begin(principal, [requested]);
+  const state = new URL(authorizationUrl).searchParams.get("state");
+  current += 600001;
+  await assert.rejects(broker.complete(state, "test-code"),
+    /GOOGLE_OAUTH_STATE_EXPIRED_OR_USED/);
+  assert.equal(httpCalls, 0);
+  await assert.rejects(broker.complete("invalid", "test-code"),
+    /GOOGLE_OAUTH_CALLBACK_INVALID/);
+});
+
+test("missing offline refresh token and denied scopes never create a connection", async t => {
+  const f = fixture(); t.after(f.close);
+  let next = tokenReply("FAKE_ACCESS_TOKEN_THAT_IS_LONG", { refreshToken: false });
+  const broker = new GoogleOAuthBroker(f.store, config, async () => next);
+  const first = await broker.begin(principal, [requested]);
+  await assert.rejects(
+    broker.complete(new URL(first.authorizationUrl).searchParams.get("state"), "code-a"),
+    /GOOGLE_REFRESH_TOKEN_MISSING/
+  );
+  assert.equal(await f.store.load("default"), null);
+  next = tokenReply("FAKE_ACCESS_TOKEN_THAT_IS_LONG", { scope: write });
+  const second = await broker.begin(principal, [requested]);
+  await assert.rejects(
+    broker.complete(new URL(second.authorizationUrl).searchParams.get("state"), "code-b"),
+    /GOOGLE_REQUIRED_SCOPES_DENIED/
+  );
+  assert.equal(await f.store.load("default"), null);
+});
+
+test("expired access token refreshes through Google endpoint, preserves refresh token, increments version", async t => {
+  const f = fixture(); t.after(f.close);
+  let clock = 1000000;
+  let refreshes = 0;
+  const broker = new GoogleOAuthBroker(f.store, config, async (_url, opts) => {
+    const fields = new URLSearchParams(opts.body);
+    if (fields.get("grant_type") === "authorization_code") {
+      return tokenReply("FAKE_INITIAL_ACCESS_TOKEN", { expiresIn: 90 });
+    }
+    refreshes++;
+    assert.equal(fields.get("grant_type"), "refresh_token");
+    assert.equal(fields.get("refresh_token"), "FAKE_REFRESH_TOKEN_THAT_IS_LONG");
+    return tokenReply("FAKE_ROTATED_ACCESS_TOKEN", {
+      expiresIn: 3600, refreshToken: false
+    });
+  }, () => clock);
+  const started = await broker.begin(principal, [requested]);
+  await broker.complete(new URL(started.authorizationUrl).searchParams.get("state"), "code");
+  const before = await broker.get("default", "trusted_client");
+  assert.equal(before.accessToken, "FAKE_INITIAL_ACCESS_TOKEN");
+  clock += 60_000;
+  const after = await broker.get("default", "trusted_client");
+  assert.equal(after.accessToken, "FAKE_ROTATED_ACCESS_TOKEN");
+  assert.equal(refreshes, 1);
+  assert.equal((await f.store.load("default")).version, 2);
+  const again = await broker.get("default", "trusted_client");
+  assert.equal(again.accessToken, "FAKE_ROTATED_ACCESS_TOKEN");
+  assert.equal(refreshes, 1);
+});
+
+test("concurrent update cannot overwrite a newer credential version", async t => {
+  const f = fixture(); t.after(f.close);
+  await f.store.connectNew({
+    account_id: "default", tokens_enc: "g1.mock.encrypted",
+    scopes_json: JSON.stringify([requested]), access_expires_at: 1000
+  }, 0);
+  const initial = await f.store.load("default");
+  const update = { account_id: "default", tokens_enc: "g1.different.encrypted",
+    scopes_json: JSON.stringify([requested]), access_expires_at: 2000 };
+  assert.equal(await f.store.compareAndSetTokens(update, initial.version, 200), true);
+  assert.equal(await f.store.compareAndSetTokens(update, initial.version, 201), false);
+  assert.equal((await f.store.load("default")).version, 2);
+});
+
+test("tampered stored ciphertext fails closed and errors never reveal provider secrets", async t => {
+  const f = fixture(); t.after(f.close);
+  const broker = new GoogleOAuthBroker(f.store, config, async () => tokenReply());
+  const flow = await broker.begin(principal, [requested]);
+  await broker.complete(new URL(flow.authorizationUrl).searchParams.get("state"), "code");
+  f.sqlite.prepare("UPDATE google_oauth_connections SET tokens_enc = ? WHERE account_id='default'")
+    .run("g1.ABC.not-valid");
+  await assert.rejects(broker.get("default", "trusted_client"), /CREDENTIAL_UNREADABLE/);
+  assert(!JSON.stringify(await f.store.load("default")).includes("FAKE_ACCESS_TOKEN"));
+});
