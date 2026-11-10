@@ -142,13 +142,10 @@ test("MCP transport is reachable only after gateway authentication", async () =>
       "Accept": "application/json, text/event-stream",
       "MCP-Protocol-Version": "2026-07-28"
     },
-    body: JSON.stringify({
-      jsonrpc: "2.0", method: "initialize", id: 1,
-      params: { protocolVersion: "2026-07-28", capabilities: {},
-        clientInfo: { name: "gateway-test", version: "0.0.1" } }
-    })
+    body: JSON.stringify({ jsonrpc: "2.0", method: "tools/list", id: 1, params: {} })
   }), devEnv);
   const text = await reply.text();
   assert.equal(reply.status, 200, text.slice(0, 1200));
-  assert(text.includes("serverInfo") || text.includes("google-master-worker"), text.slice(0, 300));
+  assert(text.includes("tasks_list_tasklists") && text.includes("script_get_project"),
+    text.slice(0, 300));
 });
