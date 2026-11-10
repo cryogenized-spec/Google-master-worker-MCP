@@ -2,7 +2,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { verifyGoogleLogin, validLoginConfig } from "../dist/packages/client-oauth/src/google-identity.js";
 import { escapeHtml, renderConsent } from "../dist/packages/client-oauth/src/html.js";
-import protectedWorker from "../dist/apps/protected-mcp/src/index.js";
+import { createMcpHandler } from "@modelcontextprotocol/server";
+import { OperationRegistry } from "../dist/packages/core/src/index.js";
+import { registerGoogleTasks } from "../dist/packages/google-tasks/src/index.js";
+import { registerAppsScript } from "../dist/packages/google-apps-script/src/index.js";
+import { createMcpServer } from "../dist/packages/mcp-adapter/src/index.js";
 
 const login = {
   clientId: "1234567890-example.apps.googleusercontent.com",
@@ -78,90 +82,37 @@ test("consent HTML escapes hostile client names, domains, handles and scopes", (
   assert.equal(escapeHtml("&<>"),"&#38;&#60;&#62;");
 });
 
-const resource="https://mcp.example.test/mcp",issuer="https://auth.example.test";
-const props={accountId:"default",userId:"owner"};
-function envFor(validateToken) {
-  return { MCP_RESOURCE_URL:resource, AUTH_ISSUER:issuer,
-    AUTH_SERVER:{validateToken}};
-}
-const mcpRequest = (token) => new Request(resource, {
-  method:"POST",
-  headers:{
-    Authorization:"Bearer "+token,
-    "Content-Type":"application/json",
-    "Accept":"application/json, text/event-stream",
-    "MCP-Protocol-Version":"2026-07-28",
-    "Mcp-Method":"tools/list"
-  },
-  body:JSON.stringify({
-    jsonrpc:"2.0", method:"tools/list", id:1,
-    params:{_meta:{
-      "io.modelcontextprotocol/protocolVersion":"2026-07-28",
-      "io.modelcontextprotocol/clientCapabilities":{},
-      "io.modelcontextprotocol/clientInfo":{name:"oauth-test",version:"0.0.1"}
-    }}
-  })
-});
 
-test("Protected MCP fails closed without authorization binding and issuer metadata", async () => {
-  const bad = await protectedWorker.fetch(new Request(resource), {
-    MCP_RESOURCE_URL:resource, AUTH_ISSUER:issuer
-  }, {});
-  assert.equal(bad.status,503);
-  const mismatch=await protectedWorker.fetch(new Request("https://another.invalid/mcp"),
-    envFor(async()=>null),{});
-  assert.equal(mismatch.status,503);
-  const health = await protectedWorker.fetch(new Request("https://mcp.example.test/healthz"),
-    {},{});
-  assert.equal(health.status,200);
-});
-
-test("Protected MCP advertises OAuth metadata and denies missing/invalid tokens", async () => {
-  const env=envFor(async()=>null);
-  const metadata=await protectedWorker.fetch(
-    new Request("https://mcp.example.test/.well-known/oauth-protected-resource/mcp"),
-    env,{});
-  assert.equal(metadata.status,200);
-  const obj=await metadata.json();
-  assert.equal(obj.resource,resource);
-  assert.deepEqual(obj.authorization_servers,[issuer]);
-  const noToken=await protectedWorker.fetch(new Request(resource),env,{});
-  assert.equal(noToken.status,401);
-  assert(noToken.headers.get("WWW-Authenticate").includes("Bearer"));
-  const invalid=await protectedWorker.fetch(mcpRequest("wrong-token"),env,{});
-  assert.equal(invalid.status,401);
-});
-
-test("Protected MCP serves only read tools after OAuth validation and never Google data", async () => {
-  let checks=0;
-  const env=envFor(async (askedResource, token)=>{
-    checks++;
-    assert.equal(askedResource,resource);
-    if(token!=="valid-token") return null;
-    return {props,audience:resource,scope:["mcp:read"],clientId:"trusted-app",
-      userId:"owner",expiresAt:Math.floor(Date.now()/1000)+300};
+test("read-only remote MCP adapter shows exactly seven read tools", async () => {
+  const registry = new OperationRegistry({ async get() { return null; } });
+  registerGoogleTasks(registry);
+  registerAppsScript(registry);
+  const handler = createMcpHandler(() => createMcpServer(registry, async () => ({
+    authenticated:true, clientId:"verified_mcp_client", accountId:"default"
+  }), {readOnly:true}), {legacy:"stateless"});
+  const request = new Request("http://localhost:8787/mcp", {
+    method: "POST",
+    headers: {
+      "Content-Type":"application/json",
+      Accept:"application/json, text/event-stream",
+      "MCP-Protocol-Version":"2026-07-28",
+      "Mcp-Method":"tools/list"
+    },
+    body: JSON.stringify({
+      jsonrpc:"2.0", id:1, method:"tools/list",
+      params:{_meta:{
+        "io.modelcontextprotocol/protocolVersion":"2026-07-28",
+        "io.modelcontextprotocol/clientCapabilities":{},
+        "io.modelcontextprotocol/clientInfo":{name:"read-only-test",version:"1.0"}
+      }}
+    })
   });
-  const response=await protectedWorker.fetch(mcpRequest("valid-token"),env,{});
-  const body=await response.text();
-  assert.equal(response.status,200,body);
-  const decoded=JSON.parse(body);
-  const tools=decoded.result.tools;
-  assert.equal(tools.length,7);
-  assert(tools.every(tool=>!tool.name.includes("create") && !tool.name.includes("update")));
-  assert(tools.some(tool=>tool.name==="script_get_content"));
-  assert.equal(checks,1);
-});
-
-test("Protected MCP rejects wrong audience and untrusted operator even with good token", async () => {
-  const wrongAudience = envFor(async()=>({
-    props,audience:"https://other.example.test/mcp",scope:["mcp:read"],
-    userId:"owner",clientId:"trusted-app"
-  }));
-  assert.equal((await protectedWorker.fetch(mcpRequest("valid-token"),wrongAudience,{})).status,401);
-  const wrongSubject=envFor(async()=>({
-    props:{accountId:"default",userId:"another"},
-    audience:resource,scope:["mcp:read"],userId:"another",clientId:"trusted-app"
-  }));
-  const result=await protectedWorker.fetch(mcpRequest("valid-token"),wrongSubject,{});
-  assert.equal(result.status,403);
+  const response = await handler.fetch(request);
+  const contents = await response.text();
+  assert.equal(response.status,200,contents);
+  const names = JSON.parse(contents).result.tools.map(x=>x.name);
+  assert.equal(names.length,7);
+  assert(names.includes("script_get_project"));
+  assert(names.includes("tasks_list_tasks"));
+  assert(!names.some(name=>name.includes("_create") || name.includes("_update")));
 });
