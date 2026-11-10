@@ -2,6 +2,11 @@ import { OperationError } from "../../core/src/index.js";
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
+function ownArrayBuffer(source: Uint8Array): ArrayBuffer {
+  const data = new ArrayBuffer(source.byteLength);
+  new Uint8Array(data).set(source);
+  return data;
+}
 
 export function encodeBase64Url(bytes: Uint8Array): string {
   let binary = "";
@@ -29,7 +34,7 @@ export async function importVaultKey(base64url: string): Promise<CryptoKey> {
   try { bytes = decodeBase64Url(base64url); }
   catch { throw new OperationError("ENCRYPTION_NOT_CONFIGURED"); }
   if (bytes.byteLength !== 32) throw new OperationError("ENCRYPTION_NOT_CONFIGURED");
-  return crypto.subtle.importKey("raw", bytes, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
+  return crypto.subtle.importKey("raw", ownArrayBuffer(bytes), { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
 }
 
 export async function sha256Url(value: string): Promise<string> {
@@ -41,7 +46,7 @@ export async function seal(key: CryptoKey, binding: string, payload: unknown): P
   if (!binding || binding.length > 256) throw new OperationError("INVALID_VAULT_BINDING");
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const ciphertext = await crypto.subtle.encrypt({
-    name: "AES-GCM", iv, additionalData: enc.encode("GMW:" + binding)
+    name: "AES-GCM", iv: ownArrayBuffer(iv), additionalData: enc.encode("GMW:" + binding)
   }, key, enc.encode(JSON.stringify(payload)));
   return "g1." + encodeBase64Url(iv) + "." +
     encodeBase64Url(new Uint8Array(ciphertext));
