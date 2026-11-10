@@ -61,7 +61,7 @@ export async function unseal<T>(key: CryptoKey, binding: string, envelope: strin
     if (iv.byteLength !== 12 || cipher.byteLength < 16 || cipher.byteLength > 65536) throw Error("bounds");
     const plaintext = await crypto.subtle.decrypt({
       name: "AES-GCM", iv, additionalData: enc.encode("GMW:" + binding)
-    }, key, cipher);
+    }, key, ownArrayBuffer(cipher));
     return JSON.parse(dec.decode(plaintext)) as T;
   } catch {
     // Never expose plaintext, key material, or native AES verification errors.
