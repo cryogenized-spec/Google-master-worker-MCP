@@ -15,7 +15,8 @@
     "types:worker": "wrangler types",
     "cloudflare:prepare": "node scripts/prepare-cloudflare.mjs",
     "cloudflare:verify": "node scripts/prepare-cloudflare.mjs --verify",
-    "test:runtime": "node --test tests/*.runtime.mjs"
+    "test:runtime": "node --test tests/*.runtime.mjs",
+    "cloudflare:inspect": "node scripts/check-cloudflare-account.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/server": "2.4.0",
