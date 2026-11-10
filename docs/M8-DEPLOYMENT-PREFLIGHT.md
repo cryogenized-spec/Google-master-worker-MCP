@@ -1,6 +1,6 @@
 # M8 — Cloudflare deployment preflight
 
-**Status:** code changes and preparation only. No Cloudflare account, domain, KV, D1, OAuth client or live Google data has been changed.
+**Status:** implemented and merged into main; account-specific deployment preparation only. No Cloudflare account, domain, KV, D1, OAuth client or live Google data has been changed.
 
 ## What's included
 
