@@ -1,6 +1,6 @@
 # Google Master Worker MCP
 
-**Status: M1 TypeScript / local MCP development — NOT deployed or connected to any personal Google account.**
+**Status: M1/M2 TypeScript and local MCP development — NOT deployed or connected to any personal Google account.**
 
 A single modular Google Workspace backend for private, bring-your-own-key use. Intended clients: **ChatGPT** (remote MCP), **ELF//SHELL Ayarime** (Firefox / HTTPS) and **CiRYVA Android** (HTTPS). The target gateway is a Cloudflare Worker, but service modules are designed to remain independently testable and portable.
 
@@ -8,11 +8,11 @@ A single modular Google Workspace backend for private, bring-your-own-key use. I
 
 - TypeScript core: named operation registry, Google OAuth scope checks, trusted client/account identity, output schema validation, independent write approvals.
 - Restricted HTTP transport to fixed Google API hosts and paths, with response-size caps and redacted errors.
-- Four Google Tasks REST tools (list tasklists, list tasks, get task, approved task creation), migrated in behavior from the existing [ELF//SHELL Workspace AI MCP](https://github.com/cryogenized-spec/elf-shell-workspace-ai/tree/main/mcp).
+- Seven Google Apps Script project lifecycle operations (metadata, content fingerprint, create, guarded source upsert, version and deployment inventory).\n- Four Google Tasks REST tools (list tasklists, list tasks, get task, approved task creation), migrated in behavior from the existing [ELF//SHELL Workspace AI MCP](https://github.com/cryogenized-spec/elf-shell-workspace-ai/tree/main/mcp).
 - Local stdio MCP development entry and a separate human-operated CLI for one-use Task write approval.
 - Synthetic/mock test suite and MCP stdio protocol handshake.
 
-**Not yet implemented:** Cloudflare Worker, remote Streamable HTTP MCP, Google OAuth broker, credential encryption, first-party REST API, Apps Script operations, Android/Firefox integration, additional Google services, live Google test acceptance.
+**Not yet implemented:** Cloudflare Worker, remote Streamable HTTP MCP, Google OAuth broker, credential encryption, first-party REST API, Apps Script remote execution, Android/Firefox integration, further Google services, live Google test acceptance.
 
 ## Development
 
@@ -23,7 +23,7 @@ npm install
 npm test
 ```
 
-See [M1 developer instructions](docs/M1-DEVELOPMENT.md) for environment and approval details. Never commit credentials, environment files, or personal Google content.
+See [M1 developer instructions](docs/M1-DEVELOPMENT.md) and [M2 Apps Script documentation](docs/M2-APPS-SCRIPT.md) for environment and approval details. Never commit credentials, environment files, or personal Google content.
 
 ## Architecture and roadmap
 

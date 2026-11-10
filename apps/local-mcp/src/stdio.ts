@@ -4,6 +4,7 @@
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import { OperationRegistry, type SessionStore } from "../../../packages/core/src/index.js";
 import { registerGoogleTasks } from "../../../packages/google-tasks/src/index.js";
+import { registerAppsScript } from "../../../packages/google-apps-script/src/index.js";
 import { createMcpServer } from "../../../packages/mcp-adapter/src/index.js";
 import { createFileApprovalGate } from "./approvals.js";
 
@@ -21,6 +22,7 @@ const sessions: SessionStore = {
 serveStdio(() => {
   const registry = new OperationRegistry(sessions, createFileApprovalGate());
   registerGoogleTasks(registry);
+  registerAppsScript(registry);
   return createMcpServer(registry, async () => ({
     authenticated: true, clientId: "local_dev", accountId
   }));
