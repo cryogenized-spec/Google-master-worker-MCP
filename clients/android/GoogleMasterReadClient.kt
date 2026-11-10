@@ -41,7 +41,7 @@ class GoogleMasterReadClient(
         require(name in readNames) { "Unsupported or non-read operation" }
         val envelope = request("POST", "/v1/operations/$name", arguments)
         if (!envelope.has("result")) throw ApiException(0, "INVALID_RESPONSE")
-        return envelope
+        return envelope.optJSONObject("result") ?: throw ApiException(0, "INVALID_RESPONSE")
     }
 
     private fun request(method: String, path: String, input: JSONObject?): JSONObject {
