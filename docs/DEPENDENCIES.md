@@ -12,7 +12,7 @@ Checked **2026-11-10** against Node.js release schedule, npm published stable di
 
 Policy: latest **stable compatible** releases, never alpha/beta/RC by default. Prefer fewer dependencies. Do not use the deprecated `McpAgent`, `WorkerTransport`, or MCP SDK v1 for new code. Dependabot checks npm dependencies and GitHub Actions weekly, opening PRs for review rather than automatically merging. Test each update with CI before acceptance.
 
-Current CI runs `npm install` because a resolved package lock is not yet committed. Before declaring production readiness, generate and commit `package-lock.json` using Node 26, switch to `npm ci`, and establish a repeatable dependency review and audit workflow. Never mistake `npm install` on CI for a reproducible locked build.
+A genuine npm-generated `package-lock.json` is now committed, and CI uses `npm ci` on Node 26. The lockfile pins transitive dependencies and package integrity hashes. Dependabot continues to open reviewable updates; do not silently regenerate the lockfile in CI. Review transitive changes and run the full test suite before merging dependency updates.
 
 Sources:
 - https://nodejs.org/en/about/previous-releases

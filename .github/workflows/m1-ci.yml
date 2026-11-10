@@ -21,13 +21,8 @@ jobs:
           node-version-file: .node-version
           check-latest: true
           package-manager-cache: false
-      - name: Install dependencies (locked when available)
-        run: |
-          if [ -f package-lock.json ]; then
-            npm ci --no-audit --no-fund
-          else
-            npm install --no-audit --no-fund
-          fi
+      - name: Install exact locked dependencies
+        run: npm ci --no-audit --no-fund
       - run: npm test
       - name: Verify Cloudflare Worker bundle without deployment
         run: npx wrangler deploy --dry-run --outdir dist-worker

@@ -10,3 +10,4 @@ coverage/
 dist-worker/
 dist-auth/
 dist-mcp/
+dist-setup/
