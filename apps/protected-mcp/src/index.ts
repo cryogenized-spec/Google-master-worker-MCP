@@ -7,9 +7,10 @@ import { GoogleJsonClient } from "../../../packages/google-http/src/index.js";
 import { registerGoogleTasks } from "../../../packages/google-tasks/src/index.js";
 import { registerAppsScript } from "../../../packages/google-apps-script/src/index.js";
 import { createMcpServer } from "../../../packages/mcp-adapter/src/index.js";
+import { createWorkspaceReadSessionStore, scopedMcpClientId, type WorkspaceVaultEnv } from "../../../packages/google-auth/src/worker-session.js";
 
 interface AuthProps { userId: "owner"; accountId: "default"; }
-export interface ProtectedEnv {
+export interface ProtectedEnv extends WorkspaceVaultEnv {
   AUTH_SERVER: AuthorizationServerBinding<AuthProps>;
   AUTH_ISSUER: string;
   MCP_RESOURCE_URL: string;
@@ -28,7 +29,7 @@ function configured(env: ProtectedEnv, request: Request): boolean {
   } catch { return false; }
 }
 
-/** Production route remains read-only AND disconnected from Google pending linking. */
+/** Read-only OAuth resource. Google access requires a separate encrypted vault connection and explicit opt-in. */
 export function createProtectedResource(env: ProtectedEnv) {
   return new OAuthResourceServer<ProtectedEnv, AuthProps>({
     resourceMetadata: {
@@ -39,7 +40,7 @@ export function createProtectedResource(env: ProtectedEnv) {
     requiredScopes: ["mcp:read"],
     validateToken: env => env.AUTH_SERVER.validateToken,
     handler: {
-      fetch(request, _env, ctx) {
+      async fetch(request, _env, ctx) {
         if (!ctx.auth.scope.includes("mcp:read")) {
           return insufficientScope(ctx.auth, ["mcp:read"]);
         }
@@ -48,12 +49,30 @@ export function createProtectedResource(env: ProtectedEnv) {
             ctx.auth.userId !== "owner" || !ctx.auth.clientId) {
           return new Response("Unauthorized principal", {status: 403});
         }
-        const principal: Principal = {
-          authenticated: true, accountId: "default", clientId: "oauth_client"
-        };
-        // No live Google session is yet available in this Worker. This ensures
-        // client OAuth alone CANNOT read Google data without explicit Google linking.
-        const registry = new OperationRegistry({async get() { return null; }});
+        // Each validated OAuth client gets a stable opaque identity, without
+        // relying on untrusted client display names or a fixed shared ID.
+        let principal: Principal;
+        try {
+          principal = {
+            authenticated: true, accountId: "default",
+            clientId: await scopedMcpClientId(ctx.auth.clientId)
+          };
+        } catch {
+          return new Response("Unauthorized principal", {status:403});
+        }
+
+        // An MCP sign-in is NOT permission to access Google. Workspace reads
+        // need an independently granted, matching Google account in D1,
+        // a server-held encryption key and explicit operator opt-in.
+        let registry: OperationRegistry;
+        try {
+          const sessions = createWorkspaceReadSessionStore(_env);
+          registry = new OperationRegistry(sessions);
+        } catch {
+          return new Response("Workspace vault unavailable", {
+            status:503, headers: {"Cache-Control":"no-store"}
+          });
+        }
         registerGoogleTasks(registry,
           new GoogleJsonClient("https://tasks.googleapis.com","/tasks/v1/"));
         registerAppsScript(registry,

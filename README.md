@@ -1,38 +1,40 @@
 # Google Master Worker MCP
 
-**Status: M5a client OAuth Workers in draft — NOT deployed or connected to any personal Google account.**
+**Status:** modular backend under development. Source is on `main`; **no production Worker deployment, Google account connection, or Google Workspace API access has been activated.**
 
-A single modular Google Workspace backend for private, bring-your-own-key use. Intended clients: **ChatGPT** (remote MCP), **ELF//SHELL Ayarime** (Firefox / HTTPS) and **CiRYVA Android** (HTTPS). The target gateway is a Cloudflare Worker, but service modules are designed to remain independently testable and portable.
+A personal, TypeScript-first Google Workspace integration platform intended to serve ChatGPT via remote MCP, ELF//SHELL Ayarime and CiRYVA Android via reusable typed HTTPS interfaces. Modules are portable and centrally routed; client apps do not need to implement Google REST logic individually.
 
-## Current implementation on `feat/m1-core-tasks`
+## Implemented
 
-- Split OAuth 2.1 client authorization Worker + protected read-only MCP Worker with Google operator sign-in, per-client consent and token validation by internal Service Binding (**not deployed**).
-- Google OAuth broker: PKCE S256 flow construction, one-use D1 state, AES-256-GCM encrypted credentials, enforced matching Google OIDC subject via UserInfo, refresh-token CAS, and local disconnect (**not HTTP-routed**).
-- TypeScript core: named operation registry, Google OAuth scope checks, trusted client/account identity, output schema validation, independent write approvals.
-- Restricted HTTP transport to fixed Google API hosts and paths, with response-size caps and redacted errors.
-- Seven Google Apps Script project lifecycle operations (metadata, content fingerprint, create, guarded source upsert, version and deployment inventory).\n- Four Google Tasks REST tools (list tasklists, list tasks, get task, approved task creation), migrated in behavior from the existing [ELF//SHELL Workspace AI MCP](https://github.com/cryogenized-spec/elf-shell-workspace-ai/tree/main/mcp).
-- Local stdio MCP development entry and a separate human-operated CLI for one-use Task write approval.
-- Synthetic/mock test suite and MCP stdio protocol handshake.
-
-**Implemented in draft PR #4:** a locked Cloudflare Worker with /mcp and typed HTTPS routes, verified against synthetic test sessions. **Not implemented:** client-to-gateway OAuth, verified Google account identity, web OAuth callback routes, remote write approval, Apps Script execution, Android/Firefox connection, live Google acceptance or public deployment. The broker remains an isolated, testable library and cannot authorize the development HTTP bearer token.
+- **Eleven typed Google operations**: four Google Tasks tools and seven Apps Script project-lifecycle tools. The remote protected MCP deliberately publishes only the **seven read-only** operations. Write operations remain confined to the local development adapter with separate human approval.
+- Shared TypeScript operation registry, strict input/output schemas, per-account Google scope checks, bounded REST transport and redacted errors.
+- Cloudflare Worker gateway development prototype plus a split, resource-scoped MCP OAuth authorization Worker and read-only protected MCP Worker.
+- Google operator authentication by verified Google OIDC subject, per-client browser consent, protected OAuth tokens and separated Google Workspace authorization.
+- Encrypted Google OAuth vault built on D1-compatible SQL and AES-256-GCM, with one-time authorization state and versioned token refresh.
+- Protected MCP session provider that **can read** an independently authorized D1 vault **only when explicitly enabled** and invoked by an OAuth-verified client. It remains disconnected by default. Google account-linking routes are not implemented yet.
+- Node 26 tests, GitHub Actions CI and Wrangler dry-run bundle checks. No public Worker routes or production secrets are committed.
 
 ## Development
 
-Requires Node.js 22 or later:
+Use **Node.js 26** and the pinned compatible stable dependencies in `package.json`:
 
 ```sh
 npm install
 npm test
 ```
 
-See [M1 developer instructions](docs/M1-DEVELOPMENT.md), [M2 Apps Script documentation](docs/M2-APPS-SCRIPT.md), and [M3 private Worker documentation](docs/M3-WORKER.md), and [M4a encrypted Google OAuth vault](docs/M4-OAUTH-VAULT.md), and [M5a client authorization](docs/M5-CLIENT-OAUTH.md). for environment and approval details. Never commit credentials, environment files, or personal Google content.
+See `docs/DEPENDENCIES.md` for the dependency policy. A committed `package-lock.json` and `npm ci` are prerequisites for repeatable production deployments and remain outstanding.
 
-## Architecture and roadmap
+## Current architecture and remaining work
 
-[Architecture and full staged roadmap (draft PR #1)](https://github.com/cryogenized-spec/Google-master-worker-MCP/pull/1). The roadmap remains a draft pending approval. Each implementation milestone remains in its own stacked draft pull request, with no automatic merge or deployment.
+The auth Worker issues scoped OAuth tokens to approved MCP clients. The protected MCP Worker validates them over an internal Service Binding, derives an opaque client identity, and exposes read-only Google operations. The Google token vault is a *second*, independent authorization boundary. Having an MCP token alone does not grant access to Google.
 
-MCP is one interface over the core, not the core itself. The planned Worker will handle remote identity, Google OAuth and risk-sensitive approvals; Firefox and Android will use the same typed operations over HTTPS. Browser navigation and appropriate large transfers may remain direct rather than pass through the Worker.
+**Not yet implemented:** securely browser-bound Workspace OAuth account-link and disconnect flow, real Cloudflare bindings and secrets, live Google authorization/consent tests, remote mutation approval, full application coverage, and direct Ayarime/CiRYVA clients.
+
+For exact rollout and security requirements, see [the updated vault/session deployment notes](docs/M6-WORKSPACE-SESSION.md), [client OAuth notes](docs/M5-CLIENT-OAUTH.md), [encrypted vault notes](docs/M4-OAUTH-VAULT.md), and [roadmap](docs/ROADMAP.md).
+
+The outdated M3 development bearer gateway is not suitable for public deployment. The protected MCP and auth Workers have `workers_dev=false` with no live routes; do not expose them before authorization flow review and operator configuration.
 
 ## License
 
-MPL-2.0, matching the source project's license for the migrated Tasks functionality. See [LICENSE](LICENSE).
+MPL-2.0, matching the source project license for reused Tasks functionality. See [LICENSE](LICENSE).
