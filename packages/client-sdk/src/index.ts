@@ -129,7 +129,22 @@ export class GoogleMasterReadClient {
     }catch{
       throw new GoogleMasterClientError("REMOTE_UNAVAILABLE");
     }
-    const parsed=await limitedJson(response);
+    let parsed:unknown;
+    try {
+      parsed=await limitedJson(response);
+    } catch(error) {
+      // OAuth resource servers may return an empty/plain-text challenge.
+      // Preserve the HTTP status without ever echoing the provider body.
+      if(!response.ok && error instanceof GoogleMasterClientError &&
+          error.code==="REMOTE_RESPONSE_INVALID") {
+        throw new GoogleMasterClientError(
+          response.status===401 ? "CLIENT_UNAUTHORIZED" :
+          response.status===403 ? "CLIENT_FORBIDDEN" : "REMOTE_REQUEST_FAILED",
+          response.status
+        );
+      }
+      throw error;
+    }
     if(!response.ok){
       throw new GoogleMasterClientError(responseError(parsed),response.status);
     }
