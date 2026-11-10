@@ -45,7 +45,7 @@ function configured(env: AuthEnv): boolean {
   });
 }
 function authorizationServer(env: AuthEnv) {
-  return new OAuthAuthorizationServer<AuthEnv, AuthProps>({
+  return new OAuthAuthorizationServer<AuthEnv>({
     issuer: env.AUTH_ISSUER,
     resources: [env.MCP_RESOURCE_URL],
     scopesSupported: [...SCOPES],
