@@ -148,7 +148,7 @@ test("MCP transport is reachable only after gateway authentication", async () =>
         clientInfo: { name: "gateway-test", version: "0.0.1" } }
     })
   }), devEnv);
-  assert.equal(reply.status, 200);
   const text = await reply.text();
+  assert.equal(reply.status, 200, text.slice(0, 1200));
   assert(text.includes("serverInfo") || text.includes("google-master-worker"), text.slice(0, 300));
 });
