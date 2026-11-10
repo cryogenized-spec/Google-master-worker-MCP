@@ -319,10 +319,10 @@ export function createSetupApp(
       try {
         const now=clock();
         if (pathname==="/setup/login" && request.method==="GET") {
-          return beginLogin(s,now);
+          return await beginLogin(s,now);
         }
         if (pathname==="/google/callback" && request.method==="GET") {
-          return finishLogin(s,request,now,googleFetch);
+          return await finishLogin(s,request,now,googleFetch);
         }
         if (pathname==="/setup" && request.method==="GET") {
           const ctx=await owner(request,s,now);
@@ -332,10 +332,10 @@ export function createSetupApp(
           return reply(documentPage(connected,ctx.csrfRaw,status));
         }
         if (pathname==="/setup/google/connect" && request.method==="POST") {
-          return startLink(request,s,now);
+          return await startLink(request,s,now);
         }
         if (pathname==="/oauth/google/callback" && request.method==="GET") {
-          return finishLink(request,s,now);
+          return await finishLink(request,s,now);
         }
         if (pathname==="/setup/disconnect" && request.method==="POST") {
           await formAuthenticated(request,s,now);
