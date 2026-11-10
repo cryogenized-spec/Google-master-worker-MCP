@@ -31,6 +31,90 @@ function configured(env: ProtectedEnv, request: Request): boolean {
   } catch { return false; }
 }
 
+
+function createReadRegistry(env: ProtectedEnv): OperationRegistry {
+  // A client token cannot activate Google reads. The D1 session remains
+  // independently gated by GMW_WORKSPACE_READS_ENABLED and Google consent.
+  const registry = new OperationRegistry(createWorkspaceReadSessionStore(env));
+  registerGoogleTasks(registry,
+    new GoogleJsonClient("https://tasks.googleapis.com", "/tasks/v1/"));
+  registerAppsScript(registry,
+    new GoogleJsonClient("https://script.googleapis.com", "/v1/"));
+  return registry;
+}
+
+function bearerChallenge(env: ProtectedEnv, error: string, status = 401): Response {
+  const canonical = new URL(env.MCP_RESOURCE_URL);
+  const metadata = canonical.origin + "/.well-known/oauth-protected-resource/mcp";
+  const header = 'Bearer realm="Google Master Worker", error="' + error +
+    '", resource_metadata="' + metadata + '", scope="mcp:read"';
+  return new Response(JSON.stringify({error: error.toUpperCase()}), {
+    status,
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+      "WWW-Authenticate": header,
+      "Cache-Control": "no-store",
+      "X-Content-Type-Options": "nosniff"
+    }
+  });
+}
+
+/** REST must route separately: the MCP-specific OAuth wrapper does not
+ * dispatch arbitrary /v1 paths. Both resource protocols validate through the
+ * same private AUTH_SERVER RPC and exact resource audience. */
+async function protectedReadApi(
+  request: Request, env: ProtectedEnv
+): Promise<Response> {
+  const authorization = request.headers.get("Authorization") ?? "";
+  const match = /^Bearer ([A-Za-z0-9._~+\/=-]{8,8192})$/i.exec(authorization);
+  if (!match) return bearerChallenge(env, "invalid_token");
+  let auth: Awaited<ReturnType<ProtectedEnv["AUTH_SERVER"]["validateToken"]>>;
+  try {
+    auth = await env.AUTH_SERVER.validateToken(env.MCP_RESOURCE_URL, match[1]);
+  } catch {
+    return new Response(JSON.stringify({error:"AUTHORIZATION_UNAVAILABLE"}), {
+      status: 503, headers: {
+        "Content-Type": "application/json", "Cache-Control": "no-store"
+      }
+    });
+  }
+  if (!auth || auth.audience !== env.MCP_RESOURCE_URL ||
+      (auth.expiresAt !== undefined &&
+        (!Number.isFinite(auth.expiresAt) || auth.expiresAt <= Date.now()/1000)) ||
+      !auth.clientId || typeof auth.clientId !== "string") {
+    return bearerChallenge(env, "invalid_token");
+  }
+  if (!Array.isArray(auth.scope) || !auth.scope.includes("mcp:read")) {
+    return bearerChallenge(env, "insufficient_scope", 403);
+  }
+  if (auth.userId !== "owner" ||
+      auth.props?.userId !== "owner" ||
+      auth.props?.accountId !== "default") {
+    return bearerChallenge(env, "invalid_token");
+  }
+  let principal: Principal;
+  try {
+    principal = {
+      authenticated: true,
+      accountId: "default",
+      clientId: await scopedMcpClientId(auth.clientId)
+    };
+  } catch {
+    return bearerChallenge(env, "invalid_token");
+  }
+  let registry: OperationRegistry;
+  try {
+    registry = createReadRegistry(env);
+  } catch {
+    return new Response(JSON.stringify({error:"WORKSPACE_VAULT_NOT_CONFIGURED"}), {
+      status: 503, headers:{
+        "Content-Type":"application/json","Cache-Control":"no-store"
+      }
+    });
+  }
+  return handleReadOnlyApi(request, registry, principal);
+}
+
 /** Read-only OAuth resource. Google access requires a separate encrypted vault connection and explicit opt-in. */
 export function createProtectedResource(env: ProtectedEnv) {
   return new OAuthResourceServer<ProtectedEnv, AuthProps>({
@@ -63,30 +147,12 @@ export function createProtectedResource(env: ProtectedEnv) {
           return new Response("Unauthorized principal", {status:403});
         }
 
-        // An MCP sign-in is NOT permission to access Google. Workspace reads
-        // need an independently granted, matching Google account in D1,
-        // a server-held encryption key and explicit operator opt-in.
         let registry: OperationRegistry;
-        try {
-          const sessions = createWorkspaceReadSessionStore(_env);
-          registry = new OperationRegistry(sessions);
-        } catch {
+        try { registry = createReadRegistry(_env); }
+        catch {
           return new Response("Workspace vault unavailable", {
-            status:503, headers: {"Cache-Control":"no-store"}
+            status:503,headers:{"Cache-Control":"no-store"}
           });
-        }
-        registerGoogleTasks(registry,
-          new GoogleJsonClient("https://tasks.googleapis.com","/tasks/v1/"));
-        registerAppsScript(registry,
-          new GoogleJsonClient("https://script.googleapis.com","/v1/"));
-        if (isRestPath(new URL(request.url).pathname)) {
-          const origin = corsOrigin(request, _env.GMW_ALLOWED_BROWSER_ORIGINS);
-          if (origin === false) {
-            return new Response("Browser origin forbidden", {
-              status:403,headers:{"Cache-Control":"no-store"}
-            });
-          }
-          return handleReadOnlyApi(request,registry,principal);
         }
         const handler = createMcpHandler(
           () => createMcpServer(registry, async () => principal, {readOnly: true}),
@@ -109,32 +175,24 @@ export default {
     }
     if (path.startsWith("/v1/")) {
       if (!isRestPath(path)) {
-        return new Response("Not found", {
-          status:404, headers:{"Cache-Control":"no-store"}
-        });
+        return new Response("Not found",{status:404});
       }
       if (request.method === "OPTIONS") {
         return restPreflight(request,env.GMW_ALLOWED_BROWSER_ORIGINS);
       }
-      if (corsOrigin(request,env.GMW_ALLOWED_BROWSER_ORIGINS) === false) {
+      const origin = corsOrigin(request,env.GMW_ALLOWED_BROWSER_ORIGINS);
+      if (origin === false) {
         return new Response("Browser origin forbidden",{
           status:403,headers:{"Cache-Control":"no-store"}
         });
       }
-    } else if (path !== "/mcp" &&
+      return corsResponse(await protectedReadApi(request,env),origin);
+    }
+    if (path !== "/mcp" &&
         path !== "/.well-known/oauth-protected-resource/mcp") {
-      return new Response("Not found", {status:404});
+      return new Response("Not found",{status:404});
     }
     const response=await createProtectedResource(env).fetch(request,env,ctx);
-    // Expose OAuth 401 to exactly allowlisted browser origins so clients can
-    // refresh expired tokens rather than reporting misleading network errors.
-    if (isRestPath(path)) {
-      const origin=corsOrigin(request,env.GMW_ALLOWED_BROWSER_ORIGINS);
-      if(origin===false) {
-        return new Response("Browser origin forbidden",{status:403});
-      }
-      return corsResponse(response,origin);
-    }
     return response;
   }
 };
