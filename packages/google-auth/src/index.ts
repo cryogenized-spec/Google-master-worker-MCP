@@ -341,6 +341,43 @@ export class GoogleOAuthBroker {
       expiresAt: newer.expiresAt };
   }
 
+  /** Revoke the Google refresh token, then remove precisely that vault version.
+   *  If Google is unreachable or rejects revocation, retain the encrypted record
+   *  rather than implying the grant was revoked.
+   */
+  async revokeAndDisconnect(accountId: string): Promise<boolean> {
+    if (!ACCOUNT.test(accountId)) throw new OperationError("INVALID_ACCOUNT_ID");
+    const record = await this.store.load(accountId);
+    if (!record) return false;
+    const envelope = await unseal<TokenEnvelope>(
+      await this.key, "connection:" + accountId, record.tokens_enc
+    );
+    if (!envelope.refreshToken || envelope.refreshToken.length < 8) {
+      throw new OperationError("CREDENTIAL_UNREADABLE");
+    }
+    let response: Response;
+    try {
+      response = await this.request("https://oauth2.googleapis.com/revoke", {
+        method: "POST",
+        redirect: "error",
+        credentials: "omit",
+        cache: "no-store",
+        signal: AbortSignal.timeout(12000),
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          "Accept": "application/json"
+        },
+        body: new URLSearchParams({token: envelope.refreshToken}).toString()
+      });
+    } catch {
+      throw new OperationError("GOOGLE_REVOCATION_UNAVAILABLE");
+    }
+    if (!response.ok) throw new OperationError("GOOGLE_REVOCATION_REJECTED");
+    const removed = await this.store.disconnectIfVersion(accountId, record.version);
+    if (!removed) throw new OperationError("GOOGLE_DISCONNECT_CONFLICT");
+    return true;
+  }
+
   /** Local-only disconnect; external Google token revocation is a later capability. */
   async disconnectLocal(accountId: string): Promise<boolean> {
     if (!ACCOUNT.test(accountId)) throw new OperationError("INVALID_ACCOUNT_ID");

@@ -69,6 +69,14 @@ export class GoogleOAuthStore {
     return Boolean(updated);
   }
 
+  /** Prevent a stale revocation request from deleting a newer connection. */
+  async disconnectIfVersion(accountId: string, version: number): Promise<boolean> {
+    const removed = await this.db.prepare(
+      "DELETE FROM google_oauth_connections WHERE account_id=? AND version=? RETURNING account_id"
+    ).bind(accountId,version).first<{account_id:string}>();
+    return Boolean(removed);
+  }
+
   async disconnect(accountId: string): Promise<boolean> {
     const removed = await this.db.prepare(
       "DELETE FROM google_oauth_connections WHERE account_id=? RETURNING account_id"

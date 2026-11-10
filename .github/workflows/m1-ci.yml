@@ -29,3 +29,5 @@ jobs:
         run: npx wrangler deploy --dry-run -c wrangler.auth.jsonc --outdir dist-auth
       - name: Verify protected MCP Worker bundle (no deployment)
         run: npx wrangler deploy --dry-run -c wrangler.protected-mcp.jsonc --outdir dist-mcp
+      - name: Verify private Workspace setup Worker bundle (no deployment)
+        run: npx wrangler deploy --dry-run -c wrangler.setup.jsonc --outdir dist-setup
