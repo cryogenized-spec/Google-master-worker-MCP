@@ -1,7 +1,7 @@
 name: TypeScript and MCP checks
 on:
   push:
-    branches: ["main", "feat/m1-core-tasks", "feat/m2-apps-script-lifecycle", "feat/m3-worker-runtime26", "feat/m4-google-oauth-vault", "feat/m5-client-oauth-resource", "feat/m5b-workspace-subject-binding"]
+    branches: ["main", "feat/**"]
   pull_request:
 
 permissions:
