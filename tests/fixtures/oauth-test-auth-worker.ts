@@ -11,14 +11,19 @@ export default class TestAuthWorker extends WorkerEntrypoint {
 
   async validateToken(resource: string, token: string) {
     if (resource !== "https://mcp.example.test/mcp" ||
-        token !== "test-owner-read-token") return null;
+        !["test-owner-read-token","test-under-scoped-token",
+          "test-wrong-audience-token","test-expired-token",
+          "test-wrong-owner-token"].includes(token)) return null;
     return {
-      props: {userId:"owner",accountId:"default"},
-      audience: resource,
-      scope: ["mcp:read"],
-      clientId: "synthetic-client-id",
-      userId: "owner",
-      expiresAt: Math.floor(Date.now()/1000)+300
+      props: {userId:token==="test-wrong-owner-token"?"unknown":"owner",
+        accountId:"default"},
+      audience:token==="test-wrong-audience-token"
+        ?"https://unrelated.example.test/mcp":resource,
+      scope:token==="test-under-scoped-token" ? ["offline_access"] : ["mcp:read"],
+      clientId:"synthetic-client-id",
+      userId:token==="test-wrong-owner-token"?"unknown":"owner",
+      expiresAt:Math.floor(Date.now()/1000)+
+        (token==="test-expired-token"?-100:300)
     };
   }
 }
