@@ -23,3 +23,5 @@ jobs:
           package-manager-cache: false
       - run: npm install --no-audit --no-fund
       - run: npm test
+      - name: Verify Cloudflare Worker bundle without deployment
+        run: npx wrangler deploy --dry-run --outdir dist-worker

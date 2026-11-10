@@ -7,7 +7,7 @@ Checked **2026-11-10** against Node.js release schedule, npm published stable di
 - `zod`: **4.6.7**.
 - `typescript`: **7.0.2**.
 - `@types/node`: **26.6.6**.
-- `wrangler`: **4.158.0**.
+- `wrangler`: **4.159.0**.
 - `actions/checkout` and `actions/setup-node`: **v7** (Node 24 internally, not deprecated Node 20).
 
 Policy: latest **stable compatible** releases, never alpha/beta/RC by default. Prefer fewer dependencies. Do not use the deprecated `McpAgent`, `WorkerTransport`, or MCP SDK v1 for new code. Dependabot checks npm dependencies and GitHub Actions weekly, opening PRs for review rather than automatically merging. Test each update with CI before acceptance.

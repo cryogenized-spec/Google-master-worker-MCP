@@ -53,3 +53,5 @@ For basic testing, send a bearer header to `/v1/capabilities` and expect 11 oper
 ## Protocol design
 
 The current MCP handler uses `createMcpHandler` from the current stable `@modelcontextprotocol/server` SDK v2. This avoids deprecated `McpAgent`, `WorkerTransport` and MCP SDK v1. A fresh authenticated server is created per MCP HTTP request; all application logic stays in shared services. Browser/local reads not requiring orchestration can continue to use direct Google UI, avoiding unnecessary Worker round trips.
+
+The CI workflow additionally runs `npx wrangler deploy --dry-run --outdir dist-worker` without Cloudflare credentials to validate that Wrangler can bundle the Worker. This does **not** deploy, create an endpoint or verify a live Google account.
