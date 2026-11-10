@@ -7,6 +7,7 @@ This module is designed for the eventual Cloudflare Worker gateway without coupl
 ## Implemented
 
 - Google OAuth 2.0 web-server authorization request, with PKCE S256, cryptographically random state and verifier, 10-minute single-use state and offline consent.
+- **Verified Google Workspace identity binding:** consent also requests `openid email`; after the token exchange the broker calls Google's authenticated UserInfo endpoint and requires the stable `sub` to match the operator's allowlisted Google subject. Identity checks run before token encryption/storage. Identity scopes are never exposed to Google API tool permissions.
 - Separate application identity (trusted principal account/client IDs) from Google scopes. Only the explicitly allowlisted Tasks and Apps Script scopes are currently permitted.
 - One-time OAuth state consumption via an atomic D1-compatible DELETE ... RETURNING statement. Only the state **hash** is stored; the PKCE verifier is encrypted.
 - Web Crypto AES-256-GCM sealed token envelopes, randomized IV and authenticated associated data binding the ciphertext to the exact account. A 32-byte key is supplied as a secret, not embedded in source or D1.
@@ -29,6 +30,7 @@ Before wiring this to a remotely reachable Worker, deliver:
 - GOOGLE_OAUTH_CLIENT_ID (Google Cloud **Web application** OAuth client).
 - GOOGLE_OAUTH_CLIENT_SECRET (confidential server-side OAuth client secret).
 - GOOGLE_OAUTH_REDIRECT_URI (exact HTTPS https://your-worker-host/oauth/google/callback registered at Google).
+- GMW_ALLOWED_GOOGLE_SUB (the same immutable Google `sub` allowlisted for operator sign-in; **never use email as identity**).
 - GMW_TOKEN_ENC_KEY (cryptographically random **32-byte base64url** AES-GCM key; never store in Git, Android APK or Firefox extension).
 - D1 binding named DB to an existing private D1 database, with migrations/0001_google_oauth_vault.sql applied.
 
@@ -40,7 +42,7 @@ Note: A lost encryption key means existing encrypted Google tokens cannot be rec
 
 - OAuth token exchange uses only https://oauth2.googleapis.com/token, POST URL form, bounded response, no redirect following, and redacted provider errors.
 - A refresh token is required on first authorization. Google may not issue a refresh token on later reauthorization; this prototype instead refuses to overwrite an existing alias. Support scope expansion only after verifying a stable Google OIDC subject.
-- This module **does not yet verify an OIDC Google subject** and therefore must not be connected to user-facing callback routes. Google account matching and consent are a prerequisite to live authorization.
+- The broker **now checks the OIDC Google subject** before saving credentials. However, this isolated module is still **not connected to user-facing routes**. Secure browser-bound callback state, operator-initiated linking, D1 provisioning, and independent write approval remain prerequisites to live authorization.
 - A local disconnect deletes the vault entry but is **not** a Google token revocation. Actual revocation and error handling are a separate integration milestone.
 - Concurrent refresh handling uses a version CAS; an outdated refresh writer cannot overwrite a newer token, but Google token rotation and crash recovery warrant further testing.
 - No broad Drive/Gmail scopes are introduced automatically. Personal-use does not imply unrestricted OAuth eligibility.

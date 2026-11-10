@@ -125,6 +125,7 @@ test("callback consumes state once, exchanges code with PKCE, encrypts tokens, e
   assert(!stored.tokens_enc.includes("FAKE_REFRESH_TOKEN"));
   const session = await broker.get("default", "trusted_client");
   assert.equal(session.accessToken, "FAKE_ACCESS_TOKEN_THAT_IS_LONG");
+  assert.deepEqual(session.scopes, [requested]); // OIDC identity scopes are never tool grants
   await assert.rejects(broker.complete(state, "disposable-test-code"),
     /GOOGLE_OAUTH_STATE_EXPIRED_OR_USED/);
   await assert.rejects(broker.begin(principal, [requested]),
@@ -166,7 +167,7 @@ test("missing offline refresh token and denied scopes never create a connection"
     /GOOGLE_REFRESH_TOKEN_MISSING/
   );
   assert.equal(await f.store.load("default"), null);
-  next = tokenReply("FAKE_ACCESS_TOKEN_THAT_IS_LONG", { scope: write });
+  next = tokenReply("FAKE_ACCESS_TOKEN_THAT_IS_LONG", { scope: write + " openid email" });
   const second = await broker.begin(principal, [requested]);
   await assert.rejects(
     broker.complete(new URL(second.authorizationUrl).searchParams.get("state"), "code-b"),
@@ -228,4 +229,65 @@ test("tampered stored ciphertext fails closed and errors never reveal provider s
     .run("g1.ABC.not-valid");
   await assert.rejects(broker.get("default", "trusted_client"), /CREDENTIAL_UNREADABLE/);
   assert(!JSON.stringify(await f.store.load("default")).includes("FAKE_ACCESS_TOKEN"));
+});
+
+
+test("Workspace OAuth rejects a different signed-in Google subject before saving credentials", async t => {
+  const f = fixture(); t.after(f.close);
+  let userInfoCalls = 0;
+  const broker = new GoogleOAuthBroker(f.store, config, async url => {
+    if (url === identityUrl) {
+      userInfoCalls++;
+      return identityReply("109999999999999999999");
+    }
+    return tokenReply();
+  });
+  const flow = await broker.begin(principal, [requested]);
+  const state = new URL(flow.authorizationUrl).searchParams.get("state");
+  await assert.rejects(broker.complete(state, "code"), /GOOGLE_IDENTITY_MISMATCH/);
+  assert.equal(userInfoCalls, 1);
+  assert.equal(await f.store.load("default"), null);
+  await assert.rejects(broker.complete(state, "code"), /GOOGLE_OAUTH_STATE_EXPIRED_OR_USED/);
+});
+
+test("Workspace OAuth rejects unverified identity and missing OIDC scopes", async t => {
+  const f = fixture(); t.after(f.close);
+  let tokenScope = requested + " openid email";
+  let verified = false;
+  const broker = new GoogleOAuthBroker(f.store, config, async url => {
+    if (url === identityUrl) return identityReply(config.allowedSubject, verified);
+    return tokenReply("FAKE_ACCESS_TOKEN_THAT_IS_LONG", {scope: tokenScope});
+  });
+  const flow1 = await broker.begin(principal, [requested]);
+  await assert.rejects(broker.complete(new URL(flow1.authorizationUrl).searchParams.get("state"),"code"),
+    /GOOGLE_IDENTITY_MISMATCH/);
+  assert.equal(await f.store.load("default"), null);
+  tokenScope = requested;
+  verified = true;
+  const flow2 = await broker.begin(principal, [requested]);
+  await assert.rejects(broker.complete(new URL(flow2.authorizationUrl).searchParams.get("state"),"code"),
+    /GOOGLE_IDENTITY_SCOPES_DENIED/);
+  assert.equal(await f.store.load("default"), null);
+});
+
+test("Workspace OAuth refuses unrelated provider scope escalation, userinfo outage and broken config", async t => {
+  const f = fixture(); t.after(f.close);
+  const unexpected = new GoogleOAuthBroker(f.store, config, async url =>
+    url === identityUrl ? identityReply() :
+      tokenReply("FAKE_ACCESS_TOKEN_THAT_IS_LONG",
+        {scope: requested + " openid email https://www.googleapis.com/auth/drive"}));
+  const flow = await unexpected.begin(principal,[requested]);
+  await assert.rejects(unexpected.complete(new URL(flow.authorizationUrl).searchParams.get("state"),"code"),
+    /GOOGLE_SCOPES_INVALID/);
+  assert.equal(await f.store.load("default"),null);
+  const down = new GoogleOAuthBroker(f.store, config, async url => {
+    if (url === identityUrl) throw Error("PROVIDER_SECRET_ERROR");
+    return tokenReply();
+  });
+  const flow2=await down.begin(principal,[requested]);
+  await assert.rejects(down.complete(new URL(flow2.authorizationUrl).searchParams.get("state"),"code"),
+    /GOOGLE_IDENTITY_UNAVAILABLE/);
+  assert.equal(await f.store.load("default"),null);
+  assert.throws(() => new GoogleOAuthBroker(f.store,{...config,allowedSubject:"wrong@email.com"}),
+    /GOOGLE_OAUTH_NOT_CONFIGURED/);
 });
