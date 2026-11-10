@@ -245,10 +245,12 @@ export class GoogleOAuthBroker {
       throw new OperationError("GOOGLE_REFRESH_TOKEN_MISSING");
     }
     if (!result.grantedScopes) throw new OperationError("GOOGLE_SCOPES_UNVERIFIED");
-    const granted = cleanScopes(result.grantedScopes);
-    if (!scopes.every(scope => granted.includes(scope))) {
+    const returnedScopes = cleanScopes(result.grantedScopes);
+    if (!scopes.every(scope => returnedScopes.includes(scope))) {
       throw new OperationError("GOOGLE_REQUIRED_SCOPES_DENIED");
     }
+    // Never implicitly grant tools additional scopes not explicitly requested here.
+    const granted = scopes;
     const expiresAt = this.now() + Math.floor(result.expiresIn * 1000);
     const encrypted = await seal(await this.key, "connection:" + pending.account_id, {
       accessToken: result.accessToken, refreshToken: result.refreshToken, expiresAt
