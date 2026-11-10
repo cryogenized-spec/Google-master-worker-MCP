@@ -94,7 +94,8 @@ export function buildConfigs(raw) {
       AUTH_ISSUER: urls.authOrigin,
       MCP_RESOURCE_URL: urls.mcpResource,
       GOOGLE_WORKSPACE_REDIRECT_URI: urls.setupRedirect,
-      GMW_WORKSPACE_READS_ENABLED:"false"
+      GMW_WORKSPACE_READS_ENABLED:"false",
+      GMW_ALLOWED_BROWSER_ORIGINS:""
     },
     // The authorization Worker exports *default* class AuthServer.
     // Cloudflare RPC selects the default export only when entrypoint is omitted.
