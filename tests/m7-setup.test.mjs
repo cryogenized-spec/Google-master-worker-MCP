@@ -31,6 +31,7 @@ function fixture() {
 function environment(DB) {
   return {
     DB, SETUP_ORIGIN:ORIGIN,
+    SETUP_RATE_LIMITER:{ async limit(){ return {success:true}; } },
     GOOGLE_LOGIN_CLIENT_ID:"test-login-client.apps.googleusercontent.com",
     GOOGLE_LOGIN_CLIENT_SECRET:"TEST_LOGIN_SECRET_LONG_STRING",
     GOOGLE_WORKSPACE_CLIENT_ID:"test-workspace-client.apps.googleusercontent.com",
@@ -293,4 +294,40 @@ test("provider revocation failure retains the encrypted vault credentials",async
   assert.equal(res.status,403);
   assert(await f.vault.load("default"));
   assert.equal(mock.calls.revoke,1);
+});
+
+
+test("setup login is throttled before creating OAuth state or contacting Google",async t=>{
+  const f=fixture();t.after(f.close);
+  const mock=googleMock();
+  const app=createSetupApp({googleFetch:mock.fetchImpl});
+  const env=environment(f.DB);
+  const seen=[];
+  env.SETUP_RATE_LIMITER={async limit({key}) {
+    seen.push(key); return {success:false};
+  }};
+  const jar=new BrowserJar();
+  const request=jar.request("/setup/login",{
+    headers:{"CF-Connecting-IP":"198.51.100.47"}
+  });
+  const response=await app.fetch(request,env);
+  assert.equal(response.status,429);
+  assert.equal(response.headers.get("Retry-After"),"60");
+  assert.deepEqual(seen,["/setup/login:198.51.100.47"]);
+  assert.equal(f.sqlite.prepare("SELECT count(*) AS n FROM google_owner_login_pending").get().n,0);
+  assert.equal(mock.calls.login,0);
+});
+test("setup requires limiter binding and fails closed if the binding errors",async t=>{
+  const f=fixture();t.after(f.close);
+  const mock=googleMock();
+  const app=createSetupApp({googleFetch:mock.fetchImpl});
+  const env=environment(f.DB);
+  delete env.SETUP_RATE_LIMITER;
+  const jar=new BrowserJar();
+  assert.equal((await app.fetch(jar.request("/setup/login"),env)).status,503);
+  env.SETUP_RATE_LIMITER={async limit(){throw Error("PROVIDER_INTERNAL_SECRET");}};
+  const result=await app.fetch(jar.request("/setup/login"),env);
+  assert.equal(result.status,503);
+  assert(!(await result.text()).includes("PROVIDER_INTERNAL_SECRET"));
+  assert.equal(f.sqlite.prepare("SELECT count(*) AS n FROM google_owner_login_pending").get().n,0);
 });
