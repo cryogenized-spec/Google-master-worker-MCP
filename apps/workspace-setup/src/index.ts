@@ -21,7 +21,12 @@ const READ_SCRIPT = "https://www.googleapis.com/auth/script.projects.readonly";
 const ALLOWED_SCOPES = new Set([READ_TASKS, READ_SCRIPT]);
 const GOOGLE_LOGIN = "https://accounts.google.com/o/oauth2/v2/auth";
 
+interface SetupRateLimiter {
+  limit(input: {key: string}): Promise<{success: boolean}>;
+}
+
 export interface SetupEnv {
+  readonly SETUP_RATE_LIMITER?: SetupRateLimiter;
   readonly DB?: D1DatabaseLike;
   readonly SETUP_ORIGIN?: string;
   readonly GOOGLE_LOGIN_CLIENT_ID?: string;
@@ -101,6 +106,19 @@ function getCookie(req: Request, name: string): string | null {
 function htmlEscape(value: string): string {
   return value.replace(/[&<>"']/g, c => "&#" + c.charCodeAt(0) + ";");
 }
+/** The Cloudflare rate-limiting binding is approximate and location-scoped.
+ * All anonymous requests without a trusted connecting IP share ONE key;
+ * missing IP metadata must never create a distinct, attacker-chosen key.
+ */
+async function checkSetupRateLimit(request: Request, env: SetupEnv, route: string): Promise<boolean> {
+  const originIp = request.headers.get("CF-Connecting-IP") || "";
+  const ip = /^[0-9a-fA-F.:]{3,64}$/.test(originIp) ? originIp : "unknown";
+  const limiter = env.SETUP_RATE_LIMITER;
+  if (!limiter) throw new OperationError("SETUP_RATE_LIMIT_NOT_CONFIGURED");
+  const result = await limiter.limit({key: route + ":" + ip});
+  return result.success === true;
+}
+
 function csrfOkay(req: Request, origin: string): boolean {
   return req.headers.get("Origin") === origin &&
     (req.headers.get("Content-Type") || "").split(";")[0].trim() ===
@@ -127,6 +145,7 @@ async function services(
   const origin = safeOrigin(env.SETUP_ORIGIN);
   if (!origin || new URL(request.url).origin !== origin ||
       !env.DB || typeof env.DB.prepare !== "function" ||
+      !env.SETUP_RATE_LIMITER || typeof env.SETUP_RATE_LIMITER.limit !== "function" ||
       !env.GMW_TOKEN_ENC_KEY || !env.GMW_ALLOWED_GOOGLE_SUB) {
     throw new OperationError("SETUP_NOT_CONFIGURED");
   }
@@ -317,6 +336,21 @@ export function createSetupApp(
       try { s=await services(env,request,googleFetch); }
       catch { return reply("Private setup unavailable.",503); }
       try {
+        // Rate-limit entrypoints BEFORE creating state, exchanging OAuth codes,
+        // reading a browser session or calling Google. Deny on limiter errors.
+        const guardedPaths = new Set([
+          "/setup/login", "/google/callback", "/setup/google/connect",
+          "/oauth/google/callback", "/setup/disconnect", "/setup/logout"
+        ]);
+        if (guardedPaths.has(pathname)) {
+          let allowed = false;
+          try { allowed = await checkSetupRateLimit(request,env,pathname); }
+          catch { return reply("Setup temporarily unavailable.",503); }
+          if (!allowed) {
+            const headers = new Headers({"Retry-After":"60"});
+            return reply("Too many requests. Try again later.",429,headers);
+          }
+        }
         const now=clock();
         if (pathname==="/setup/login" && request.method==="GET") {
           return await beginLogin(s,now);

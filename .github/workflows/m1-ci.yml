@@ -21,7 +21,8 @@ jobs:
           node-version-file: .node-version
           check-latest: true
           package-manager-cache: false
-      - run: npm install --no-audit --no-fund
+      - name: Install exact locked dependencies
+        run: npm ci --no-audit --no-fund
       - run: npm test
       - name: Verify Cloudflare Worker bundle without deployment
         run: npx wrangler deploy --dry-run --outdir dist-worker

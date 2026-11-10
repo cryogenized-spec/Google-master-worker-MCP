@@ -8,6 +8,7 @@ import { verifyGoogleLogin, validLoginConfig } from "../../../packages/client-oa
 import { renderConsent } from "../../../packages/client-oauth/src/html.js";
 
 interface AuthEnv {
+  AUTH_RATE_LIMITER: {limit(input: {key: string}): Promise<{success: boolean}>};
   OAUTH_KV: KVNamespace;
   AUTH_ISSUER: string;
   MCP_RESOURCE_URL: string;
@@ -35,7 +36,9 @@ function validResource(value: string): boolean {
   } catch { return false; }
 }
 function configured(env: AuthEnv): boolean {
-  if (!env?.OAUTH_KV || !validRoot(env.AUTH_ISSUER) ||
+  if (!env?.OAUTH_KV || !env.AUTH_RATE_LIMITER ||
+      typeof env.AUTH_RATE_LIMITER.limit !== "function" ||
+      !validRoot(env.AUTH_ISSUER) ||
       !validResource(env.MCP_RESOURCE_URL)) return false;
   return validLoginConfig({
     clientId: env.GOOGLE_LOGIN_CLIENT_ID,
@@ -162,6 +165,22 @@ export default class AuthServer extends WorkerEntrypoint<AuthEnv> {
     if (new URL(request.url).origin !==
         new URL(this.env.AUTH_ISSUER).origin) return problem(421,"Unknown host");
     const path = new URL(request.url).pathname;
+    const throttled = new Set(["/authorize", "/google/callback",
+      "/oauth/token", "/oauth/register"]);
+    if (throttled.has(path)) {
+      const ipHeader = request.headers.get("CF-Connecting-IP") || "";
+      const ip = /^[0-9a-fA-F.:]{3,64}$/.test(ipHeader) ? ipHeader : "unknown";
+      let allowed = false;
+      try {
+        const check = await this.env.AUTH_RATE_LIMITER.limit({key: path + ":" + ip});
+        allowed = check.success === true;
+      } catch { return problem(503,"Authorization temporarily unavailable"); }
+      if (!allowed) {
+        const response = problem(429,"Too many authorization requests");
+        response.headers.set("Retry-After","60");
+        return response;
+      }
+    }
     try {
       if (path === "/authorize" && request.method === "GET") {
         return await startAuthorization(request,this.env);
