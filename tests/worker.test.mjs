@@ -140,9 +140,17 @@ test("MCP transport is reachable only after gateway authentication", async () =>
       ...bearer,
       "Content-Type": "application/json",
       "Accept": "application/json, text/event-stream",
-      "MCP-Protocol-Version": "2026-07-28"
+      "MCP-Protocol-Version": "2026-07-28",
+      "Mcp-Method": "tools/list"
     },
-    body: JSON.stringify({ jsonrpc: "2.0", method: "tools/list", id: 1, params: {} })
+    body: JSON.stringify({
+      jsonrpc: "2.0", method: "tools/list", id: 1,
+      params: { _meta: {
+        "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+        "io.modelcontextprotocol/clientCapabilities": {},
+        "io.modelcontextprotocol/clientInfo": { name: "gateway-test", version: "0.0.1" }
+      }}
+    })
   }), devEnv);
   const text = await reply.text();
   assert.equal(reply.status, 200, text.slice(0, 1200));
