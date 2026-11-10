@@ -192,7 +192,10 @@ test("MCP stdio handshake discovers tools; unconfigured create cannot write", as
   child.stdin.write(JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }) + "\n");
   const listed = await ask("tools/list");
   assert.deepEqual(listed.result.tools.map(tool => tool.name).sort(),
-    ["tasks_create_task", "tasks_get_task", "tasks_list_tasklists", "tasks_list_tasks"]);
+    ["script_create_project", "script_create_version", "script_get_content",
+     "script_get_project", "script_list_deployments", "script_list_versions",
+     "script_update_sources", "tasks_create_task", "tasks_get_task",
+     "tasks_list_tasklists", "tasks_list_tasks"]);
   const denial = await ask("tools/call", {
     name: "tasks_create_task", arguments: { tasklistId: "l1", title: "Never create" }
   });

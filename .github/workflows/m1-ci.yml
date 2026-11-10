@@ -1,9 +1,8 @@
-name: M1 TypeScript core and Tasks MCP
+name: M1/M2 TypeScript modules and MCP
 on:
   push:
-    branches: ["feat/m1-core-tasks", "main"]
+    branches: ["main", "feat/m1-core-tasks", "feat/m2-apps-script-lifecycle"]
   pull_request:
-    branches: ["main"]
 
 permissions:
   contents: read
