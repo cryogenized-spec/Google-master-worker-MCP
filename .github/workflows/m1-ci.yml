@@ -24,6 +24,8 @@ jobs:
       - name: Install exact locked dependencies
         run: npm ci --no-audit --no-fund
       - run: npm test
+      - name: Verify actual local workerd OAuth and HTTP routing
+        run: npm run test:runtime
       - name: Verify Cloudflare Worker bundle without deployment
         run: npx wrangler deploy --dry-run --outdir dist-worker
       - name: Verify OAuth authorization Worker bundle (no deployment)
