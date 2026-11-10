@@ -7,6 +7,7 @@ import { GoogleJsonClient } from "../../../packages/google-http/src/index.js";
 import { registerGoogleTasks } from "../../../packages/google-tasks/src/index.js";
 import { registerAppsScript } from "../../../packages/google-apps-script/src/index.js";
 import { createMcpServer } from "../../../packages/mcp-adapter/src/index.js";
+import { handleReadOnlyApi, isRestPath, restPreflight, corsOrigin, corsResponse } from "../../../packages/rest-adapter/src/index.js";
 import { createWorkspaceReadSessionStore, scopedMcpClientId, type WorkspaceVaultEnv } from "../../../packages/google-auth/src/worker-session.js";
 
 interface AuthProps { userId: "owner"; accountId: "default"; }
@@ -14,6 +15,7 @@ export interface ProtectedEnv extends WorkspaceVaultEnv {
   AUTH_SERVER: AuthorizationServerBinding<AuthProps>;
   AUTH_ISSUER: string;
   MCP_RESOURCE_URL: string;
+  GMW_ALLOWED_BROWSER_ORIGINS?: string;
 }
 
 function configured(env: ProtectedEnv, request: Request): boolean {
@@ -77,6 +79,15 @@ export function createProtectedResource(env: ProtectedEnv) {
           new GoogleJsonClient("https://tasks.googleapis.com","/tasks/v1/"));
         registerAppsScript(registry,
           new GoogleJsonClient("https://script.googleapis.com","/v1/"));
+        if (isRestPath(new URL(request.url).pathname)) {
+          const origin = corsOrigin(request, _env.GMW_ALLOWED_BROWSER_ORIGINS);
+          if (origin === false) {
+            return new Response("Browser origin forbidden", {
+              status:403,headers:{"Cache-Control":"no-store"}
+            });
+          }
+          return corsResponse(await handleReadOnlyApi(request,registry,principal),origin);
+        }
         const handler = createMcpHandler(
           () => createMcpServer(registry, async () => principal, {readOnly: true}),
           {legacy: "stateless"}
@@ -96,7 +107,21 @@ export default {
     if (!configured(env,request)) {
       return new Response("MCP OAuth resource not configured", {status:503});
     }
-    if (path !== "/mcp" &&
+    if (path.startsWith("/v1/")) {
+      if (!isRestPath(path)) {
+        return new Response("Not found", {
+          status:404, headers:{"Cache-Control":"no-store"}
+        });
+      }
+      if (request.method === "OPTIONS") {
+        return restPreflight(request,env.GMW_ALLOWED_BROWSER_ORIGINS);
+      }
+      if (corsOrigin(request,env.GMW_ALLOWED_BROWSER_ORIGINS) === false) {
+        return new Response("Browser origin forbidden",{
+          status:403,headers:{"Cache-Control":"no-store"}
+        });
+      }
+    } else if (path !== "/mcp" &&
         path !== "/.well-known/oauth-protected-resource/mcp") {
       return new Response("Not found", {status:404});
     }
