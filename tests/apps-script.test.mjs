@@ -116,10 +116,10 @@ test("invalid source changes, missing manifest and page results fail safely", as
   await assert.rejects(bad.execute("script_get_content", { scriptId: "s123" }, principal),
     /GOOGLE_MANIFEST_MISSING/);
   const r = registry([SCRIPT_WRITE], async (url, options) => {
-    if (String(url).endsWith("/versions")) {
+    if (new URL(url).pathname.endsWith("/versions")) {
       return okay({ versions: [{ versionNumber: 2, description: "v2" }], nextPageToken: "NEXT" });
     }
-    if (String(url).endsWith("/deployments")) {
+    if (new URL(url).pathname.endsWith("/deployments")) {
       return okay({ deployments: [{ deploymentId: "dep1", deploymentConfig: {
         description: "API executable" } }] });
     }
