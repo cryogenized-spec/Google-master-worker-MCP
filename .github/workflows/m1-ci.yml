@@ -1,7 +1,7 @@
-name: M1/M2 TypeScript modules and MCP
+name: TypeScript and MCP checks
 on:
   push:
-    branches: ["main", "feat/m1-core-tasks", "feat/m2-apps-script-lifecycle"]
+    branches: ["main", "feat/m1-core-tasks", "feat/m2-apps-script-lifecycle", "feat/m3-worker-runtime26"]
   pull_request:
 
 permissions:
@@ -9,13 +9,19 @@ permissions:
 
 jobs:
   test:
-    name: Typecheck, build and protocol tests
+    name: Node 26 · Typecheck and tests
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
         with:
-          node-version: "22"
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          check-latest: true
+          package-manager-cache: false
       - run: npm install --no-audit --no-fund
       - run: npm test
+      - name: Verify Cloudflare Worker bundle without deployment
+        run: npx wrangler deploy --dry-run --outdir dist-worker
