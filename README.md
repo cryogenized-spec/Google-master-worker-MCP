@@ -7,7 +7,7 @@ A single modular Google Workspace backend for private, bring-your-own-key use. I
 ## Current implementation on `feat/m1-core-tasks`
 
 - Split OAuth 2.1 client authorization Worker + protected read-only MCP Worker with Google operator sign-in, per-client consent and token validation by internal Service Binding (**not deployed**).
-- Google OAuth broker: PKCE S256 flow construction, one-use D1 state, AES-256-GCM encrypted credentials, refresh-token CAS, and local disconnect (**not HTTP-routed**).
+- Google OAuth broker: PKCE S256 flow construction, one-use D1 state, AES-256-GCM encrypted credentials, enforced matching Google OIDC subject via UserInfo, refresh-token CAS, and local disconnect (**not HTTP-routed**).
 - TypeScript core: named operation registry, Google OAuth scope checks, trusted client/account identity, output schema validation, independent write approvals.
 - Restricted HTTP transport to fixed Google API hosts and paths, with response-size caps and redacted errors.
 - Seven Google Apps Script project lifecycle operations (metadata, content fingerprint, create, guarded source upsert, version and deployment inventory).\n- Four Google Tasks REST tools (list tasklists, list tasks, get task, approved task creation), migrated in behavior from the existing [ELF//SHELL Workspace AI MCP](https://github.com/cryogenized-spec/elf-shell-workspace-ai/tree/main/mcp).

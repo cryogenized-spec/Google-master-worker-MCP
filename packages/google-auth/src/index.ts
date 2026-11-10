@@ -5,6 +5,7 @@ import {
   decodeBase64Url, encodeBase64Url, importVaultKey, seal, unseal, sha256Url
 } from "./crypto.js";
 import { GoogleOAuthStore, type StoredConnection } from "./store.js";
+import { verifyAuthorizedGoogleSubject } from "./identity.js";
 
 const ALLOWED_SCOPES = new Set([
   "https://www.googleapis.com/auth/tasks.readonly",
@@ -13,6 +14,8 @@ const ALLOWED_SCOPES = new Set([
   "https://www.googleapis.com/auth/script.projects"
 ]);
 const ACCOUNT = /^[A-Za-z0-9_-]{1,64}$/;
+const GOOGLE_SUB = /^[0-9]{8,64}$/;
+const OIDC_SCOPES = ["openid", "email"] as const;
 const AUTHORIZATION_ORIGIN = "https://accounts.google.com/o/oauth2/v2/auth";
 const TOKEN_ORIGIN = "https://oauth2.googleapis.com/token";
 const TOKEN_BODY_MAX_BYTES = 32 * 1024;
@@ -25,6 +28,8 @@ export interface GoogleOAuthConfig {
   readonly redirectUri: string;
   /** One 32-byte key encoded in canonical base64url, from a Worker secret. */
   readonly encryptionKeyBase64Url: string;
+  /** Numeric Google OIDC subject independently verified for the owner at login. */
+  readonly allowedSubject: string;
 }
 interface TokenEnvelope {
   readonly accessToken: string;
@@ -83,7 +88,8 @@ function checkConfig(config: GoogleOAuthConfig): void {
       target.protocol !== "https:" ||
       target.pathname !== "/oauth/google/callback" ||
       target.username || target.password || target.search || target.hash ||
-      (target.port && target.port !== "443")) {
+      (target.port && target.port !== "443") ||
+      typeof config.allowedSubject !== "string" || !GOOGLE_SUB.test(config.allowedSubject)) {
     throw new OperationError("GOOGLE_OAUTH_NOT_CONFIGURED");
   }
 }
@@ -206,7 +212,9 @@ export class GoogleOAuthBroker {
     url.searchParams.set("state", state);
     url.searchParams.set("code_challenge_method", "S256");
     url.searchParams.set("code_challenge", await sha256Url(verifier));
-    url.searchParams.set("scope", scopes.join(" "));
+    // Bind any granted Workspace API scopes to the same Google identity
+    // previously verified by the client authorization Worker.
+    url.searchParams.set("scope", [...scopes, ...OIDC_SCOPES].join(" "));
     url.searchParams.set("access_type", "offline");
     url.searchParams.set("prompt", "consent");
     url.searchParams.set("include_granted_scopes", "false");
@@ -245,10 +253,21 @@ export class GoogleOAuthBroker {
       throw new OperationError("GOOGLE_REFRESH_TOKEN_MISSING");
     }
     if (!result.grantedScopes) throw new OperationError("GOOGLE_SCOPES_UNVERIFIED");
-    const returnedScopes = cleanScopes(result.grantedScopes);
+    if (!OIDC_SCOPES.every(scope => result.grantedScopes!.includes(scope))) {
+      throw new OperationError("GOOGLE_IDENTITY_SCOPES_DENIED");
+    }
+    const returnedScopes = cleanScopes(
+      result.grantedScopes.filter(scope => !OIDC_SCOPES.includes(scope as "openid" | "email"))
+    );
     if (!scopes.every(scope => returnedScopes.includes(scope))) {
       throw new OperationError("GOOGLE_REQUIRED_SCOPES_DENIED");
     }
+    // The callback never trusts an email address or caller-supplied account alias:
+    // Google userinfo determines the stable account subject independently.
+    // A mismatch MUST fail before encrypting or storing any credentials.
+    await verifyAuthorizedGoogleSubject(
+      result.accessToken, this.config.allowedSubject, this.request
+    );
     // Never implicitly grant tools additional scopes not explicitly requested here.
     const granted = scopes;
     const expiresAt = this.now() + Math.floor(result.expiresIn * 1000);
