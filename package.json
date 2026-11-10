@@ -12,7 +12,9 @@
     "test": "npm run build && node --test tests/*.test.mjs",
     "check": "npm run test",
     "dev:worker": "wrangler dev",
-    "types:worker": "wrangler types"
+    "types:worker": "wrangler types",
+    "cloudflare:prepare": "node scripts/prepare-cloudflare.mjs",
+    "cloudflare:verify": "node scripts/prepare-cloudflare.mjs --verify"
   },
   "dependencies": {
     "@modelcontextprotocol/server": "2.4.0",

@@ -32,3 +32,11 @@ jobs:
         run: npx wrangler deploy --dry-run -c wrangler.protected-mcp.jsonc --outdir dist-mcp
       - name: Verify private Workspace setup Worker bundle (no deployment)
         run: npx wrangler deploy --dry-run -c wrangler.setup.jsonc --outdir dist-setup
+      - name: Validate generated route-free Cloudflare staging configurations
+        run: |
+          # These are CI-only synthetic IDs; no Cloudflare resources or DNS records exist.
+          node scripts/prepare-cloudflare.mjs --zone ci-synthetic-only.co.za --kv-id 0123456789abcdef0123456789abcdef --d1-id 01234567-89ab-cdef-0123-456789abcdef --db-name fake-ci-vault --auth-rate-id 11013 --setup-rate-id 11014
+          node scripts/prepare-cloudflare.mjs --verify
+          npx wrangler deploy --dry-run -c .wrangler-deploy.auth.jsonc --outdir dist-preflight-auth
+          npx wrangler deploy --dry-run -c .wrangler-deploy.mcp.jsonc --outdir dist-preflight-mcp
+          npx wrangler deploy --dry-run -c .wrangler-deploy.setup.jsonc --outdir dist-preflight-setup

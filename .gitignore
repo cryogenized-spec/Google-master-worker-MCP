@@ -11,3 +11,6 @@ dist-worker/
 dist-auth/
 dist-mcp/
 dist-setup/
+
+# Local Cloudflare account configuration (IDs, hostnames; no secrets)
+.wrangler-deploy.*.jsonc
