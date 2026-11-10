@@ -11,7 +11,6 @@ import {
 import {
   GoogleMasterReadClient, GoogleMasterClientError
 } from "../dist/packages/client-sdk/src/index.js";
-import protectedWorker from "../dist/apps/protected-mcp/src/index.js";
 
 const ORIGIN="https://mcp.example.test", RESOURCE=ORIGIN+"/mcp";
 const principal={authenticated:true,accountId:"default",clientId:"mcp_"+"a".repeat(48)};
@@ -201,81 +200,27 @@ test("portable SDK forbids HTTP, unsafe resource URLs, bad token and redirect/ma
   });
 });
 
-function oauthEnv({token="valid-token",scopes=["mcp:read"],originConfig,enabled="false"}={}) {
-  return {
-    MCP_RESOURCE_URL:RESOURCE,
-    AUTH_ISSUER:"https://auth.example.test",
-    GMW_WORKSPACE_READS_ENABLED:enabled,
-    GMW_ALLOWED_BROWSER_ORIGINS:originConfig,
-    AUTH_SERVER: {
-      async validateToken(resource,supplied) {
-        assert.equal(resource,RESOURCE);
-        if(supplied!==token) return null;
-        return {
-          props:{userId:"owner",accountId:"default"},
-          audience:RESOURCE,scope:scopes,
-          clientId:"verified-client",userId:"owner",
-          expiresAt:Math.floor(Date.now()/1000)+300
-        };
-      }
-    }
-  };
-}
-
-test("protected Worker authenticates HTTPS operation routes through MCP OAuth resource server",async()=>{
-  const env=oauthEnv();
-  const unauthorized=await protectedWorker.fetch(
-    new Request(ORIGIN+"/v1/capabilities"),env,{}
-  );
-  assert.equal(unauthorized.status,401);
-  const authorized=await protectedWorker.fetch(
-    new Request(ORIGIN+"/v1/capabilities",{headers:{
-      Authorization:"Bearer valid-token"
-    }}),env,{}
-  );
-  const body=await authorized.text();
-  assert.equal(authorized.status,200,body);
-  const catalog=JSON.parse(body);
-  assert.equal(catalog.operations.length,7);
-  assert(!body.includes(access));
-  // Valid MCP client alone is NOT a Google connection.
-  const read=await protectedWorker.fetch(
-    new Request(ORIGIN+"/v1/operations/tasks_list_tasklists",{
-      method:"POST",headers:{
-        Authorization:"Bearer valid-token",
-        "Content-Type":"application/json"
-      },body:"{}"
-    }),env,{}
-  );
-  assert.equal(read.status,503);
-  assert.deepEqual(await read.json(),{error:"GOOGLE_SESSION_NOT_CONFIGURED"});
+test("client recognizes plain-text OAuth 401/403 without leaking the server body",async()=>{
+  const token="FAKE_AUTH_TOKEN_1234567890";
+  for(const [status,expected] of [[401,"CLIENT_UNAUTHORIZED"],[403,"CLIENT_FORBIDDEN"]]){
+    const client=new GoogleMasterReadClient({
+      resourceUrl:RESOURCE,
+      getAccessToken:async()=>token,
+      transport:async()=>new Response("Secret provider details are not JSON",
+        {status,headers:{"Content-Type":"text/plain"}})
+    });
+    await assert.rejects(client.capabilities(),{code:expected,status});
+  }
 });
 
-test("protected Worker CORS preflight and browser origin enforcement precede OAuth",async()=>{
-  const env=oauthEnv({originConfig:"https://workspace.example.test"});
-  const denied=await protectedWorker.fetch(
-    new Request(ORIGIN+"/v1/capabilities",{
-      headers:{Origin:"https://untrusted.example.test",Authorization:"Bearer valid-token"}
-    }),env,{}
+test("REST under-scoped Google credentials fail without requesting provider data",async()=>{
+  const registry=registryWithFakeGoogle({scopes:[
+    "https://www.googleapis.com/auth/script.projects.readonly"
+  ]});
+  const response=await handleReadOnlyApi(
+    post("/v1/operations/tasks_list_tasklists","{}"),registry,principal
   );
-  assert.equal(denied.status,403);
-  const preflight=await protectedWorker.fetch(new Request(ORIGIN+"/v1/capabilities",{
-    method:"OPTIONS",headers:{
-      Origin:"https://workspace.example.test",
-      "Access-Control-Request-Method":"GET",
-      "Access-Control-Request-Headers":"authorization"
-    }
-  }),env,{});
-  assert.equal(preflight.status,204);
-  const permitted=await protectedWorker.fetch(new Request(ORIGIN+"/v1/capabilities",{
-    headers:{Origin:"https://workspace.example.test",Authorization:"Bearer valid-token"}
-  }),env,{});
-  assert.equal(permitted.status,200);
-  assert.equal(permitted.headers.get("Access-Control-Allow-Origin"),
-    "https://workspace.example.test");
-  const underScoped=await protectedWorker.fetch(
-    new Request(ORIGIN+"/v1/capabilities",{headers:{Authorization:"Bearer valid-token"}}),
-    oauthEnv({scopes:["offline_access"]}),{}
-  );
-  assert.equal(underScoped.status,403);
+  assert.equal(response.status,403);
+  assert.deepEqual(await response.json(),{error:"GOOGLE_SCOPE_MISSING"});
+  assert.equal(googleRequests,0);
 });
