@@ -1,0 +1,22 @@
+name: M1 TypeScript core and Tasks MCP
+on:
+  push:
+    branches: ["feat/m1-core-tasks", "main"]
+  pull_request:
+    branches: ["main"]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Typecheck, build and protocol tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm install --no-audit --no-fund
+      - run: npm test

@@ -1,28 +1,36 @@
 # Google Master Worker MCP
 
-**Status:** architecture and roadmap draft; no production service deployed.
+**Status: M1 TypeScript / local MCP development — NOT deployed or connected to any personal Google account.**
 
-A private-use, TypeScript-first Google Workspace integration backend that exposes independently maintained Google API modules through an authenticated remote MCP gateway and a reusable HTTPS interface for **ELF//SHELL Ayarime** and **CiRYVA Android**.
+A single modular Google Workspace backend for private, bring-your-own-key use. Intended clients: **ChatGPT** (remote MCP), **ELF//SHELL Ayarime** (Firefox / HTTPS) and **CiRYVA Android** (HTTPS). The target gateway is a Cloudflare Worker, but service modules are designed to remain independently testable and portable.
 
-## Principles
+## Current implementation on `feat/m1-core-tasks`
 
-- **One shared implementation, multiple clients:** Google REST adapters are not coupled to MCP, Firefox, or Android.
-- **Modular Google services:** Apps Script, Drive, Sheets, Docs, Tasks, Calendar and additional integrations use distinct, typed modules and named operations.
-- **Personal BYOK deployment:** Cloudflare Workers, operator-controlled Google Cloud OAuth, and explicitly authorized accounts.
-- **Separate identities:** Access to our gateway is not equivalent to Google account authorization; scope and write-approval checks occur independently.
-- **Safe changes:** source diffs, approvals for meaningful mutations, audit breadcrumbs, idempotency, and rollback paths. Do not expose arbitrary Google REST requests or credentials as AI tools.
-- **Incremental delivery:** one functioning end-to-end vertical slice at a time; no monolithic rewrite or test-first delivery blockade.
+- TypeScript core: named operation registry, Google OAuth scope checks, trusted client/account identity, output schema validation, independent write approvals.
+- Restricted HTTP transport to fixed Google API hosts and paths, with response-size caps and redacted errors.
+- Four Google Tasks REST tools (list tasklists, list tasks, get task, approved task creation), migrated in behavior from the existing [ELF//SHELL Workspace AI MCP](https://github.com/cryogenized-spec/elf-shell-workspace-ai/tree/main/mcp).
+- Local stdio MCP development entry and a separate human-operated CLI for one-use Task write approval.
+- Synthetic/mock test suite and MCP stdio protocol handshake.
 
-## Project lineage
+**Not yet implemented:** Cloudflare Worker, remote Streamable HTTP MCP, Google OAuth broker, credential encryption, first-party REST API, Apps Script operations, Android/Firefox integration, additional Google services, live Google test acceptance.
 
-The established Tasks REST MCP development slice in [ELF//SHELL Workspace AI](https://github.com/cryogenized-spec/elf-shell-workspace-ai/tree/main/mcp) provides four tools and a local stdio harness, with mock API tests and separate local action approvals. Those pieces are a **source of reusable logic**, not a hosted production deployment. Migration will preserve verified functionality and will not affect the existing Firefox companion until explicitly integrated.
+## Development
 
-## Roadmap
+Requires Node.js 22 or later:
 
-See the proposed [development roadmap](docs/ROADMAP.md) in the draft pull request. No deploy, credential onboarding, data changes or production OAuth configuration is authorized by this document.
+```sh
+npm install
+npm test
+```
 
-## Status and workflow
+See [M1 developer instructions](docs/M1-DEVELOPMENT.md) for environment and approval details. Never commit credentials, environment files, or personal Google content.
 
-This repository starts with a minimal README to establish its default branch. Architecture decisions and the milestone plan are developed in a **draft pull request** before implementation or merging. Keep credentials and user Google account data out of Git commits, issues, pull requests and CI logs.
+## Architecture and roadmap
 
-License, precise package layout and release policy remain to be established by approved implementation changes.
+[Architecture and full staged roadmap (draft PR #1)](https://github.com/cryogenized-spec/Google-master-worker-MCP/pull/1). The roadmap remains a draft pending approval. M1 stays in a separate draft pull request, with no automatic merge or deployment.
+
+MCP is one interface over the core, not the core itself. The planned Worker will handle remote identity, Google OAuth and risk-sensitive approvals; Firefox and Android will use the same typed operations over HTTPS. Browser navigation and appropriate large transfers may remain direct rather than pass through the Worker.
+
+## License
+
+MPL-2.0, matching the source project's license for the migrated Tasks functionality. See [LICENSE](LICENSE).
