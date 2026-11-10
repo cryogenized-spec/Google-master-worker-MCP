@@ -50,9 +50,7 @@ before(async()=>{
 after(async()=>{await server.close();},{timeout:60000});
 
 function request(path,method="GET",headers={},body){
-  return protectedWorker.fetch(new Request(origin+path,{
-    method,headers,body
-  }));
+  return protectedWorker.fetch(origin+path,{method,headers,body});
 }
 
 test("health discloses no secrets or connection details",async()=>{
