@@ -5,9 +5,10 @@ import { publicError } from "../../core/src/index.js";
 export type ResolvePrincipal = () => Promise<Principal>;
 
 /** Transport-independent MCP tool registry; caller supplies trusted identity. */
-export function createMcpServer(registry: OperationRegistry, resolvePrincipal: ResolvePrincipal): McpServer {
+export function createMcpServer(registry: OperationRegistry, resolvePrincipal: ResolvePrincipal, options: {readOnly?: boolean} = {}): McpServer {
   const server = new McpServer({ name: "google-master-worker", version: "0.1.0" });
   for (const definition of registry.catalogue()) {
+    if (options.readOnly && definition.risk !== "read") continue;
     server.registerTool(definition.name, {
       description: definition.description,
       inputSchema: definition.inputSchema as any,

@@ -1,11 +1,12 @@
 # Google Master Worker MCP
 
-**Status: M4a Google OAuth vault development — NOT deployed or connected to any personal Google account.**
+**Status: M5a client OAuth Workers in draft — NOT deployed or connected to any personal Google account.**
 
 A single modular Google Workspace backend for private, bring-your-own-key use. Intended clients: **ChatGPT** (remote MCP), **ELF//SHELL Ayarime** (Firefox / HTTPS) and **CiRYVA Android** (HTTPS). The target gateway is a Cloudflare Worker, but service modules are designed to remain independently testable and portable.
 
 ## Current implementation on `feat/m1-core-tasks`
 
+- Split OAuth 2.1 client authorization Worker + protected read-only MCP Worker with Google operator sign-in, per-client consent and token validation by internal Service Binding (**not deployed**).
 - Google OAuth broker: PKCE S256 flow construction, one-use D1 state, AES-256-GCM encrypted credentials, refresh-token CAS, and local disconnect (**not HTTP-routed**).
 - TypeScript core: named operation registry, Google OAuth scope checks, trusted client/account identity, output schema validation, independent write approvals.
 - Restricted HTTP transport to fixed Google API hosts and paths, with response-size caps and redacted errors.
@@ -24,7 +25,7 @@ npm install
 npm test
 ```
 
-See [M1 developer instructions](docs/M1-DEVELOPMENT.md), [M2 Apps Script documentation](docs/M2-APPS-SCRIPT.md), and [M3 private Worker documentation](docs/M3-WORKER.md), and [M4a encrypted Google OAuth vault](docs/M4-OAUTH-VAULT.md). for environment and approval details. Never commit credentials, environment files, or personal Google content.
+See [M1 developer instructions](docs/M1-DEVELOPMENT.md), [M2 Apps Script documentation](docs/M2-APPS-SCRIPT.md), and [M3 private Worker documentation](docs/M3-WORKER.md), and [M4a encrypted Google OAuth vault](docs/M4-OAUTH-VAULT.md), and [M5a client authorization](docs/M5-CLIENT-OAUTH.md). for environment and approval details. Never commit credentials, environment files, or personal Google content.
 
 ## Architecture and roadmap
 

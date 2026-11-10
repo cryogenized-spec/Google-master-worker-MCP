@@ -1,7 +1,10 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "lib": ["ES2022", "DOM"],
+    "lib": [
+      "ES2022",
+      "DOM"
+    ],
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "rootDir": ".",
@@ -10,10 +13,19 @@
     "noEmitOnError": true,
     "skipLibCheck": true,
     "declaration": true,
-    "types": ["node"],
+    "types": [
+      "node",
+      "@cloudflare/workers-types"
+    ],
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["packages/**/*.ts", "apps/**/*.ts"],
-  "exclude": ["dist", "node_modules"]
+  "include": [
+    "packages/**/*.ts",
+    "apps/**/*.ts"
+  ],
+  "exclude": [
+    "dist",
+    "node_modules"
+  ]
 }

@@ -1,7 +1,7 @@
 name: TypeScript and MCP checks
 on:
   push:
-    branches: ["main", "feat/m1-core-tasks", "feat/m2-apps-script-lifecycle", "feat/m3-worker-runtime26", "feat/m4-google-oauth-vault"]
+    branches: ["main", "feat/m1-core-tasks", "feat/m2-apps-script-lifecycle", "feat/m3-worker-runtime26", "feat/m4-google-oauth-vault", "feat/m5-client-oauth-resource"]
   pull_request:
 
 permissions:
@@ -25,3 +25,7 @@ jobs:
       - run: npm test
       - name: Verify Cloudflare Worker bundle without deployment
         run: npx wrangler deploy --dry-run --outdir dist-worker
+      - name: Verify OAuth authorization Worker bundle (no deployment)
+        run: npx wrangler deploy --dry-run -c wrangler.auth.jsonc --outdir dist-auth
+      - name: Verify protected MCP Worker bundle (no deployment)
+        run: npx wrangler deploy --dry-run -c wrangler.protected-mcp.jsonc --outdir dist-mcp
