@@ -11,7 +11,7 @@ The official, non-deprecated Wrangler \`createTestHarness()\` starts two Workers
 
 The protected Worker connects through its **actual internal Service Binding** \`AUTH_SERVER\`, with the same default-export binding semantics established in M9. The test harness supplies only mock \`AUTH_ISSUER\`, \`MCP_RESOURCE_URL\`, and \`GMW_WORKSPACE_READS_ENABLED=false\`. There is **no Google D1 connection, no Google session, and no Google API request**.
 
-The harness verifies: public minimal health response; missing/invalid client bearer rejected with a 401 challenge; test-authorized read-only tool catalogue; write-name rejection; read requests still denied without Google Workspace authorization; exact-origin CORS preflight and rejection; CORS for permitted browser success and OAuth failure; MCP route requiring its own OAuth token.
+The harness verifies: public minimal health response; missing/invalid client bearer rejected with a 401 challenge; wrong audience, expired token and mismatched owner rejected; insufficient `mcp:read` scope rejected with 403; test-authorized read-only tool catalogue; write-name rejection; read requests still denied without Google Workspace authorization; exact-origin CORS preflight and rejection; CORS for permitted browser success and OAuth failure; MCP route requiring its own OAuth token.
 
 ## Running locally
 
