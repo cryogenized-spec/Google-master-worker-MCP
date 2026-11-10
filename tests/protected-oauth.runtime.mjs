@@ -141,3 +141,25 @@ test("MCP route rejects absent OAuth and remains distinct from direct HTTPS rout
     params:{_meta:{"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}}));
   assert.equal(response.status,401);
 });
+
+
+test("wrong audience, expired tokens and incorrect operator identity are rejected",async()=>{
+  for(const token of [
+    "test-wrong-audience-token","test-expired-token","test-wrong-owner-token"
+  ]){
+    const response=await request("/v1/capabilities","GET",{
+      Authorization:"Bearer "+token
+    });
+    assert.equal(response.status,401,token);
+    assert.match(response.headers.get("WWW-Authenticate")||"",/invalid_token/);
+  }
+});
+
+test("insufficient client scopes produce a 403 challenge with requested scope",async()=>{
+  const response=await request("/v1/capabilities","GET",{
+    Authorization:"Bearer test-under-scoped-token"
+  });
+  assert.equal(response.status,403);
+  assert.match(response.headers.get("WWW-Authenticate")||"",/insufficient_scope/);
+  assert.match(response.headers.get("WWW-Authenticate")||"",/mcp:read/);
+});
