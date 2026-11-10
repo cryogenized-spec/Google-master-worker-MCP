@@ -86,7 +86,7 @@ export function createProtectedResource(env: ProtectedEnv) {
               status:403,headers:{"Cache-Control":"no-store"}
             });
           }
-          return corsResponse(await handleReadOnlyApi(request,registry,principal),origin);
+          return handleReadOnlyApi(request,registry,principal);
         }
         const handler = createMcpHandler(
           () => createMcpServer(registry, async () => principal, {readOnly: true}),
@@ -99,7 +99,7 @@ export function createProtectedResource(env: ProtectedEnv) {
 }
 
 export default {
-  fetch(request: Request, env: ProtectedEnv, ctx: ExecutionContext) {
+  async fetch(request: Request, env: ProtectedEnv, ctx: ExecutionContext) {
     const path = new URL(request.url).pathname;
     if (path === "/healthz" && request.method === "GET") {
       return Response.json({status:"locked", googleConnection:false});
@@ -125,6 +125,16 @@ export default {
         path !== "/.well-known/oauth-protected-resource/mcp") {
       return new Response("Not found", {status:404});
     }
-    return createProtectedResource(env).fetch(request,env,ctx);
+    const response=await createProtectedResource(env).fetch(request,env,ctx);
+    // Expose OAuth 401 to exactly allowlisted browser origins so clients can
+    // refresh expired tokens rather than reporting misleading network errors.
+    if (isRestPath(path)) {
+      const origin=corsOrigin(request,env.GMW_ALLOWED_BROWSER_ORIGINS);
+      if(origin===false) {
+        return new Response("Browser origin forbidden",{status:403});
+      }
+      return corsResponse(response,origin);
+    }
+    return response;
   }
 };
