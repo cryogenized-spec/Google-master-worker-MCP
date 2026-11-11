@@ -6,12 +6,13 @@ import {
 } from "./crypto.js";
 import { GoogleOAuthStore, type StoredConnection } from "./store.js";
 import { verifyAuthorizedGoogleSubject } from "./identity.js";
+import { WORKSPACE_SCOPES, WORKSPACE_SCOPES_SET } from "./scopes.js";
 
-const ALLOWED_SCOPES = new Set([
-  "https://www.googleapis.com/auth/tasks.readonly",
-  "https://www.googleapis.com/auth/tasks",
-  "https://www.googleapis.com/auth/script.projects.readonly",
-  "https://www.googleapis.com/auth/script.projects"
+const ALLOWED_SCOPES = WORKSPACE_SCOPES_SET;
+const IDENTITY_SCOPES = new Set([
+  "openid", "email", "profile",
+  "https://www.googleapis.com/auth/userinfo.email",
+  "https://www.googleapis.com/auth/userinfo.profile"
 ]);
 const ACCOUNT = /^[A-Za-z0-9_-]{1,64}$/;
 const GOOGLE_SUB = /^[0-9]{8,64}$/;
@@ -57,7 +58,7 @@ export interface OAuthCompletion {
 }
 
 function cleanScopes(raw: unknown): string[] {
-  if (!Array.isArray(raw) || raw.length === 0 || raw.length > 6) {
+  if (!Array.isArray(raw) || raw.length === 0 || raw.length > WORKSPACE_SCOPES.length) {
     throw new OperationError("GOOGLE_SCOPES_INVALID");
   }
   const value = Array.from(new Set(raw));
@@ -253,14 +254,20 @@ export class GoogleOAuthBroker {
       throw new OperationError("GOOGLE_REFRESH_TOKEN_MISSING");
     }
     if (!result.grantedScopes) throw new OperationError("GOOGLE_SCOPES_UNVERIFIED");
-    if (!OIDC_SCOPES.every(scope => result.grantedScopes!.includes(scope))) {
+    if (!result.grantedScopes.includes("openid") ||
+        !result.grantedScopes.some(scope =>
+          scope === "email" || scope === "https://www.googleapis.com/auth/userinfo.email")) {
       throw new OperationError("GOOGLE_IDENTITY_SCOPES_DENIED");
     }
     const returnedScopes = cleanScopes(
-      result.grantedScopes.filter(scope => !OIDC_SCOPES.includes(scope as "openid" | "email"))
+      result.grantedScopes.filter(scope => !IDENTITY_SCOPES.has(scope))
     );
     if (!scopes.every(scope => returnedScopes.includes(scope))) {
       throw new OperationError("GOOGLE_REQUIRED_SCOPES_DENIED");
+    }
+    // Never adopt extra Workspace grants from provider scope normalization.
+    if (!returnedScopes.every(scope => scopes.includes(scope))) {
+      throw new OperationError("GOOGLE_SCOPES_INVALID");
     }
     // The callback never trusts an email address or caller-supplied account alias:
     // Google userinfo determines the stable account subject independently.

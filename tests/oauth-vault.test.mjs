@@ -10,6 +10,7 @@ import { GoogleOAuthStore } from "../dist/packages/google-auth/src/store.js";
 import {
   GoogleOAuthBroker
 } from "../dist/packages/google-auth/src/index.js";
+import { WORKSPACE_SCOPES } from "../dist/packages/google-auth/src/scopes.js";
 
 const requested = "https://www.googleapis.com/auth/tasks.readonly";
 const write = "https://www.googleapis.com/auth/tasks";
@@ -98,6 +99,34 @@ test("authorization URL has PKCE S256 + offline consent; D1 stores no raw state/
   assert.equal(result.expiresAt > Date.now(), true);
 });
 
+
+test("one-session authorization supports the entire registered Workspace scope bundle", async t => {
+  const f = fixture(); t.after(f.close);
+  let tokenExchanges = 0;
+  const broker = new GoogleOAuthBroker(f.store, config, async url => {
+    if (url === identityUrl) return identityReply();
+    tokenExchanges++;
+    return tokenReply("FAKE_ACCESS_TOKEN_THAT_IS_LONG", {
+      scope: [...WORKSPACE_SCOPES, "openid", "email"].join(" ")
+    });
+  });
+  assert(WORKSPACE_SCOPES.length >= 35);
+  assert.equal(new Set(WORKSPACE_SCOPES).size, WORKSPACE_SCOPES.length);
+  const started = await broker.begin(principal, WORKSPACE_SCOPES);
+  const url = new URL(started.authorizationUrl);
+  const requestedScopes = url.searchParams.get("scope").split(" ");
+  assert.deepEqual(new Set(requestedScopes), new Set([...WORKSPACE_SCOPES, "openid", "email"]));
+  assert.equal(url.searchParams.get("access_type"), "offline");
+  assert.equal(url.searchParams.get("prompt"), "consent");
+  const state = url.searchParams.get("state");
+  const completed = await broker.complete(state, "fake-code");
+  assert.deepEqual(completed.scopes, [...WORKSPACE_SCOPES].sort());
+  assert.equal(tokenExchanges, 1);
+  const stored = await f.store.load("default");
+  assert.deepEqual(JSON.parse(stored.scopes_json), [...WORKSPACE_SCOPES].sort());
+  assert(!stored.tokens_enc.includes("FAKE_ACCESS_TOKEN"));
+});
+
 test("callback consumes state once, exchanges code with PKCE, encrypts tokens, exposes only safe metadata", async t => {
   const f = fixture(); t.after(f.close);
   let exchanges = 0;
@@ -153,7 +182,7 @@ test("callback cannot redeem expired state, unknown scope or a replayed state", 
     httpCalls++;
     return tokenReply();
   }, () => current);
-  await assert.rejects(broker.begin(principal, ["https://www.googleapis.com/auth/drive"]),
+  await assert.rejects(broker.begin(principal, ["https://www.googleapis.com/auth/unsupported.scope"]),
     /GOOGLE_SCOPES_INVALID/);
   await assert.rejects(broker.begin({ ...principal, authenticated: false }, [requested]),
     /CLIENT_UNAUTHORIZED/);

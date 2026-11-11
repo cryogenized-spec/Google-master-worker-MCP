@@ -5,6 +5,7 @@ import { DatabaseSync } from "node:sqlite";
 import { encodeBase64Url } from "../dist/packages/google-auth/src/crypto.js";
 import { GoogleOAuthStore } from "../dist/packages/google-auth/src/store.js";
 import { createSetupApp } from "../dist/apps/workspace-setup/src/index.js";
+import { WORKSPACE_SCOPES } from "../dist/packages/google-auth/src/scopes.js";
 
 const ORIGIN="https://setup.example.test";
 const SUBJECT="123456789012345678901";
@@ -208,6 +209,27 @@ test("browser OAuth login and Workspace consent bind to one verified session, ne
   assert.equal(logout.status,303);
   assert(!jar.cookies.has("__Host-gmw_owner"));
   assert.equal((await app.fetch(jar.request("/setup"),env)).status,303);
+});
+
+
+test("operator setup offers a single complete Workspace consent request",async t=>{
+  const f=fixture(); t.after(f.close);
+  const mock=googleMock();
+  const app=createSetupApp({googleFetch:mock.fetchImpl});
+  const env=environment(f.DB),jar=new BrowserJar();
+  await login(app,env,jar);
+  const page=await app.fetch(jar.request("/setup"),env);
+  const html=await page.text();
+  const listed=[...html.matchAll(/name="scope" value="([^"]+)"/g)].map(m=>m[1]);
+  assert.deepEqual(listed,WORKSPACE_SCOPES);
+  assert(html.includes("Authorize complete Google Workspace bundle"));
+  const csrf=csrfFrom(html);
+  assert(new URLSearchParams([["csrf",csrf],...listed.map(s=>["scope",s])]).toString().length<4096);
+  const start=await app.fetch(jar.post("/setup/google/connect",csrf,listed),env);
+  assert.equal(start.status,303);
+  const scopes=new URL(start.headers.get("Location")).searchParams.get("scope").split(" ");
+  assert.deepEqual(new Set(scopes),new Set([...WORKSPACE_SCOPES,"openid","email"]));
+  assert.equal(mock.calls.workspace,0);
 });
 
 test("missing session, cross-origin form, wrong CSRF and duplicate scope all block linking",async t=>{

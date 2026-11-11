@@ -1,5 +1,6 @@
 import { OperationError } from "../../../packages/core/src/index.js";
 import { GoogleOAuthBroker, type GoogleOAuthConfig } from "../../../packages/google-auth/src/index.js";
+import { WORKSPACE_SCOPES } from "../../../packages/google-auth/src/scopes.js";
 import { OwnerBrowserStore, type OwnerSession } from "../../../packages/google-auth/src/browser-store.js";
 import { GoogleOAuthStore, type D1DatabaseLike } from "../../../packages/google-auth/src/store.js";
 import {
@@ -16,9 +17,7 @@ const CSRF_COOKIE = "__Host-gmw_csrf";
 const LOGIN_MS = 10 * 60_000;
 const SESSION_MS = 60 * 60_000;
 const LINK_MS = 10 * 60_000;
-const READ_TASKS = "https://www.googleapis.com/auth/tasks.readonly";
-const READ_SCRIPT = "https://www.googleapis.com/auth/script.projects.readonly";
-const ALLOWED_SCOPES = new Set([READ_TASKS, READ_SCRIPT]);
+const ALLOWED_SCOPES = new Set(WORKSPACE_SCOPES);
 const GOOGLE_LOGIN = "https://accounts.google.com/o/oauth2/v2/auth";
 
 interface SetupRateLimiter {
@@ -248,10 +247,15 @@ function documentPage(connected:boolean, csrf:string, status:string): string {
     '<button type="submit">Revoke Google grant and disconnect</button></form>'
   ):(
     '<p>Google Workspace vault: <strong>Not connected</strong></p>'+
+    '<p>This requests the complete registered Workspace OAuth scope bundle in one consent session. '+
+    'Google account eligibility and API access restrictions still apply. '+
+    'Cloudflare MCP operations remain separately controlled.</p>'+
     '<form method="post" action="/setup/google/connect"><input type="hidden" name="csrf" value="'+htmlEscape(csrf)+'">'+
-    '<p><label><input type="checkbox" name="scope" value="'+READ_TASKS+'" checked> Google Tasks — read only</label></p>'+
-    '<p><label><input type="checkbox" name="scope" value="'+READ_SCRIPT+'"> Apps Script source — read only</label></p>'+
-    '<button type="submit">Review Google permissions</button></form>'
+    WORKSPACE_SCOPES.map(scope => '<input type="hidden" name="scope" value="'+htmlEscape(scope)+'">').join('')+
+    '<details><summary>Review all '+WORKSPACE_SCOPES.length+' requested scopes</summary><ul>'+
+    WORKSPACE_SCOPES.map(scope => '<li>'+htmlEscape(scope)+'</li>').join('')+
+    '</ul></details>'+
+    '<p><button type="submit">Authorize complete Google Workspace bundle</button></p></form>'
   );
   return '<!doctype html><html lang="en"><head><meta charset="utf-8">'+
     '<meta name="viewport" content="width=device-width,initial-scale=1">'+
@@ -282,7 +286,7 @@ async function startLink(
     throw new OperationError("SETUP_FORM_INVALID");
   }
   const scopes = form.getAll("scope");
-  if (!scopes.length || scopes.length > 2 ||
+  if (!scopes.length || scopes.length > WORKSPACE_SCOPES.length ||
       new Set(scopes).size !== scopes.length ||
       scopes.some(value => !ALLOWED_SCOPES.has(value))) {
     throw new OperationError("SETUP_SCOPES_REJECTED");
