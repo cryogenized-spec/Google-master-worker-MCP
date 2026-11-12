@@ -20,7 +20,7 @@ test("Operator OIDC login exchanges code with PKCE and validates Google's stable
   const reply = async (url, options) => {
     seen.push({url,options});
     assert.equal(options.credentials, "omit");
-    assert.equal(options.redirect,"error");
+    assert.equal(options.redirect, "manual");
     if (url === "https://oauth2.googleapis.com/token") {
       assert.equal(options.method,"POST");
       const fields = new URLSearchParams(options.body);
