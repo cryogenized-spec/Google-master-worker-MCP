@@ -217,8 +217,13 @@ test("operator setup offers a single complete Workspace consent request",async t
   const mock=googleMock();
   const app=createSetupApp({googleFetch:mock.fetchImpl});
   const env=environment(f.DB),jar=new BrowserJar();
-  await login(app,env,jar);
+  const signedIn=await login(app,env,jar);
+  assert.equal(signedIn.start.headers.get("Referrer-Policy"),"no-referrer");
+  assert.equal(signedIn.back.headers.get("Referrer-Policy"),"no-referrer");
   const page=await app.fetch(jar.request("/setup"),env);
+  // Real HTML form navigation needs the browser to send a non-null Origin.
+  // no-referrer forces Origin:null for a form POST despite being same-site.
+  assert.equal(page.headers.get("Referrer-Policy"),"same-origin");
   const html=await page.text();
   const listed=[...html.matchAll(/name="scope" value="([^"]+)"/g)].map(m=>m[1]);
   assert.deepEqual(listed,WORKSPACE_SCOPES);
@@ -245,6 +250,8 @@ test("missing session, cross-origin form, wrong CSRF and duplicate scope all blo
   assert.equal((await app.fetch(jar.post("/setup/google/connect","wrong",[SCOPE]),env)).status,403);
   assert.equal((await app.fetch(jar.post("/setup/google/connect",csrf,[SCOPE],
     {Origin:"https://attacker.invalid"}),env)).status,403);
+  assert.equal((await app.fetch(jar.post("/setup/google/connect",csrf,[SCOPE],
+    {Origin:"null"}),env)).status,403);
   assert.equal((await app.fetch(jar.post("/setup/google/connect",csrf,[SCOPE,SCOPE]),env)).status,403);
   assert.equal((await app.fetch(jar.post("/setup/google/connect",csrf,
     ["https://www.googleapis.com/auth/gmail.readonly"]),env)).status,403);
