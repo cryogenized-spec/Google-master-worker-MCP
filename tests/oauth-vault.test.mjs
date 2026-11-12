@@ -196,6 +196,25 @@ test("callback cannot redeem expired state, unknown scope or a replayed state", 
     /GOOGLE_OAUTH_CALLBACK_INVALID/);
 });
 
+test("Workspace token exchange rejects provider redirects without saving credentials", async t => {
+  const f=fixture(); t.after(f.close);
+  let requests=0;
+  const broker=new GoogleOAuthBroker(f.store,config,async (url,options)=>{
+    requests++;
+    assert.equal(url,"https://oauth2.googleapis.com/token");
+    assert.equal(options.redirect,"manual");
+    return new Response(null,{status:302,headers:{
+      Location:"https://untrusted.example.test/steal"
+    }});
+  });
+  const flow=await broker.begin(principal,[requested]);
+  await assert.rejects(broker.complete(
+    new URL(flow.authorizationUrl).searchParams.get("state"),"disposable-code"
+  ),/GOOGLE_OAUTH_TOKEN_REJECTED/);
+  assert.equal(requests,1);
+  assert.equal(await f.store.load("default"),null);
+});
+
 test("missing offline refresh token and denied scopes never create a connection", async t => {
   const f = fixture(); t.after(f.close);
   let next = tokenReply("FAKE_ACCESS_TOKEN_THAT_IS_LONG", { refreshToken: false });
