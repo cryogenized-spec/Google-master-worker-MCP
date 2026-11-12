@@ -77,12 +77,14 @@ test("invalid token and guessed write URLs fail closed before Google",async()=>{
   assert.deepEqual(await write.json(),{error:"UNKNOWN_OPERATION"});
 });
 
-test("service-bound OAuth grants a seven-operation read-only catalogue",async()=>{
+test("service-bound OAuth grants a 24-operation read-only catalogue",async()=>{
   const response=await request("/v1/capabilities","GET",{Authorization:good});
   const body=await response.text();
   assert.equal(response.status,200,body);
   const operations=JSON.parse(body).operations;
-  assert.equal(operations.length,7);
+  assert.equal(operations.length,24);
+  assert(operations.some(op=>op.name==="gmail_list_messages"));
+  assert(operations.some(op=>op.name==="sheets_get_values"));
   assert(operations.every(op=>op.risk==="read"));
   assert(operations.some(op=>op.name==="tasks_list_tasklists"));
   assert(!body.includes("test-owner-read-token"));
