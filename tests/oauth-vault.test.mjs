@@ -237,7 +237,7 @@ test("missing refresh token and unexpected provider scopes never create a connec
 
 test("personal Workspace bundle stores only actual user-approved scope subset", async t => {
   const f=fixture(); t.after(f.close);
-  const approved=[requested,"https://www.googleapis.com/auth/drive"];
+  const approved=[write,"https://www.googleapis.com/auth/drive"];
   const broker=new GoogleOAuthBroker(f.store,config,async url =>
     url===identityUrl ? identityReply() : tokenReply(undefined,{
       scope:[...approved,"openid","email"].join(" ")
