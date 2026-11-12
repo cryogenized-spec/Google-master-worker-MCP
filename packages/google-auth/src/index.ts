@@ -102,7 +102,7 @@ async function tokenRequest(
   try {
     response = await request(TOKEN_ORIGIN, {
       method: "POST",
-      redirect: "error",
+      redirect: "manual",
       credentials: "omit",
       cache: "no-store",
       signal: AbortSignal.timeout(12000),
@@ -366,7 +366,7 @@ export class GoogleOAuthBroker {
     try {
       response = await this.request("https://oauth2.googleapis.com/revoke", {
         method: "POST",
-        redirect: "error",
+        redirect: "manual",
         credentials: "omit",
         cache: "no-store",
         signal: AbortSignal.timeout(12000),
