@@ -215,7 +215,7 @@ test("Workspace token exchange rejects provider redirects without saving credent
   assert.equal(await f.store.load("default"),null);
 });
 
-test("missing offline refresh token and denied scopes never create a connection", async t => {
+test("missing refresh token and unexpected provider scopes never create a connection", async t => {
   const f = fixture(); t.after(f.close);
   let next = tokenReply("FAKE_ACCESS_TOKEN_THAT_IS_LONG", { refreshToken: false });
   const broker = new GoogleOAuthBroker(f.store, config, async () => next);
@@ -229,7 +229,7 @@ test("missing offline refresh token and denied scopes never create a connection"
   const second = await broker.begin(principal, [requested]);
   await assert.rejects(
     broker.complete(new URL(second.authorizationUrl).searchParams.get("state"), "code-b"),
-    /GOOGLE_REQUIRED_SCOPES_DENIED/
+    /GOOGLE_SCOPES_INVALID/
   );
   assert.equal(await f.store.load("default"), null);
 });
