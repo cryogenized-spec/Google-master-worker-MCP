@@ -1,6 +1,6 @@
 import { OperationError } from "../../../packages/core/src/index.js";
 import { GoogleOAuthBroker, type GoogleOAuthConfig } from "../../../packages/google-auth/src/index.js";
-import { WORKSPACE_SCOPES } from "../../../packages/google-auth/src/scopes.js";
+import { WORKSPACE_SCOPES, PERSONAL_WORKSPACE_SCOPES } from "../../../packages/google-auth/src/scopes.js";
 import { OwnerBrowserStore, type OwnerSession } from "../../../packages/google-auth/src/browser-store.js";
 import { GoogleOAuthStore, type D1DatabaseLike } from "../../../packages/google-auth/src/store.js";
 import {
@@ -240,25 +240,32 @@ async function finishLogin(
     cookie(CSRF_COOKIE,csrf,3600)
   ]);
 }
-function documentPage(connected:boolean, csrf:string, status:string): string {
+function documentPage(connected:boolean, csrf:string, status:string, grantedCount=0): string {
   const statusText = status === "connected" ? "Workspace connected successfully." :
     status === "cancelled" ? "Authorization cancelled." :
     status === "disconnected" ? "Stored connection disconnected and revoked." : "";
   const connect = connected ? (
-    '<p>Google Workspace vault: <strong>Connected</strong></p>'+
+    '<p>Google Workspace vault: <strong>Connected</strong> ('+grantedCount+' granted scopes)</p>'+
     '<form method="post" action="/setup/disconnect"><input type="hidden" name="csrf" value="'+htmlEscape(csrf)+'">'+
     '<button type="submit">Revoke Google grant and disconnect</button></form>'
   ):(
     '<p>Google Workspace vault: <strong>Not connected</strong></p>'+
-    '<p>This requests the complete registered Workspace OAuth scope bundle in one consent session. '+
-    'Google account eligibility and API access restrictions still apply. '+
+    '<p>For personal Gmail: one broad consent for '+PERSONAL_WORKSPACE_SCOPES.length+
+    ' proposed scopes across Tasks, Apps Script, Drive, Docs, Sheets, Slides, Calendar, Gmail, Contacts, Forms, and Meet. '+
+    'Google may still withhold permissions; only granted scopes will be stored. '+
     'Cloudflare MCP operations remain separately controlled.</p>'+
     '<form method="post" action="/setup/google/connect"><input type="hidden" name="csrf" value="'+htmlEscape(csrf)+'">'+
-    WORKSPACE_SCOPES.map(scope => '<input type="hidden" name="scope" value="'+htmlEscape(scope)+'">').join('')+
-    '<details><summary>Review all '+WORKSPACE_SCOPES.length+' requested scopes</summary><ul>'+
-    WORKSPACE_SCOPES.map(scope => '<li>'+htmlEscape(scope)+'</li>').join('')+
+    PERSONAL_WORKSPACE_SCOPES.map(scope => '<input type="hidden" name="scope" value="'+htmlEscape(scope)+'">').join('')+
+    '<details><summary>Review '+PERSONAL_WORKSPACE_SCOPES.length+' personal-account scopes</summary><ul>'+
+    PERSONAL_WORKSPACE_SCOPES.map(scope => '<li>'+htmlEscape(scope)+'</li>').join('')+
     '</ul></details>'+
-    '<p><button type="submit">Authorize complete Google Workspace bundle</button></p></form>'
+    '<p><button type="submit">Authorize broad personal Gmail bundle</button></p></form>'+
+    '<details><summary>Advanced: Google Workspace organization permissions</summary>'+
+    '<p>Only for eligible managed Workspace accounts. Personal Gmail cannot grant organization '+
+    'administrator, Vault, enterprise Keep or certain Chat/Classroom scopes.</p>'+
+    '<form method="post" action="/setup/google/connect"><input type="hidden" name="csrf" value="'+htmlEscape(csrf)+'">'+
+    WORKSPACE_SCOPES.map(scope => '<input type="hidden" name="scope" value="'+htmlEscape(scope)+'">').join('')+
+    '<p><button type="submit">Request all '+WORKSPACE_SCOPES.length+' scopes (managed Workspace)</button></p></form></details>'
   );
   return '<!doctype html><html lang="en"><head><meta charset="utf-8">'+
     '<meta name="viewport" content="width=device-width,initial-scale=1">'+
@@ -368,9 +375,12 @@ export function createSetupApp(
         if (pathname==="/setup" && request.method==="GET") {
           const ctx=await owner(request,s,now);
           if (!ctx) return redirect(s.origin+"/setup/login");
-          const connected=Boolean(await s.vault.load("default"));
+          const record=await s.vault.load("default");
+          const connected=Boolean(record);
+          const scopeList=record ? JSON.parse(record.scopes_json) as unknown : [];
+          const grantedCount=Array.isArray(scopeList) ? scopeList.length : 0;
           const status=new URL(request.url).searchParams.get("status") || "";
-          return reply(documentPage(connected,ctx.csrfRaw,status),200,
+          return reply(documentPage(connected,ctx.csrfRaw,status,grantedCount),200,
             new Headers({"Referrer-Policy":"same-origin"}));
         }
         if (pathname==="/setup/google/connect" && request.method==="POST") {

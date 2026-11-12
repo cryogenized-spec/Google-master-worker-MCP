@@ -5,7 +5,7 @@ import { DatabaseSync } from "node:sqlite";
 import { encodeBase64Url } from "../dist/packages/google-auth/src/crypto.js";
 import { GoogleOAuthStore } from "../dist/packages/google-auth/src/store.js";
 import { createSetupApp } from "../dist/apps/workspace-setup/src/index.js";
-import { WORKSPACE_SCOPES } from "../dist/packages/google-auth/src/scopes.js";
+import { WORKSPACE_SCOPES, PERSONAL_WORKSPACE_SCOPES } from "../dist/packages/google-auth/src/scopes.js";
 
 const ORIGIN="https://setup.example.test";
 const SUBJECT="123456789012345678901";
@@ -194,6 +194,7 @@ test("browser OAuth login and Workspace consent bind to one verified session, ne
   const html=await rendered.text();
   assert.equal(rendered.status,200);
   assert(html.includes("Connected"));
+  assert(html.includes("1 granted scopes"));
   assert(!html.includes("TEST_WORKSPACE_ACCESS_TOKEN"));
   assert(!html.includes("TEST_WORKSPACE_REFRESH_TOKEN"));
   assert(!JSON.stringify([...jar.cookies]).includes("TEST_WORKSPACE"));
@@ -212,7 +213,7 @@ test("browser OAuth login and Workspace consent bind to one verified session, ne
 });
 
 
-test("operator setup offers a single complete Workspace consent request",async t=>{
+test("operator setup offers one broad personal consent and an explicitly advanced Workspace request",async t=>{
   const f=fixture(); t.after(f.close);
   const mock=googleMock();
   const app=createSetupApp({googleFetch:mock.fetchImpl});
@@ -225,15 +226,27 @@ test("operator setup offers a single complete Workspace consent request",async t
   // no-referrer forces Origin:null for a form POST despite being same-site.
   assert.equal(page.headers.get("Referrer-Policy"),"same-origin");
   const html=await page.text();
-  const listed=[...html.matchAll(/name="scope" value="([^"]+)"/g)].map(m=>m[1]);
-  assert.deepEqual(listed,WORKSPACE_SCOPES);
-  assert(html.includes("Authorize complete Google Workspace bundle"));
+  const forms=[...html.matchAll(/<form method="post" action="\/setup\/google\/connect">([\s\S]*?)<\/form>/g)]
+    .map(match=>match[1]);
+  assert.equal(forms.length,2);
+  const listed=[...forms[0].matchAll(/name="scope" value="([^"]+)"/g)].map(m=>m[1]);
+  const advanced=[...forms[1].matchAll(/name="scope" value="([^"]+)"/g)].map(m=>m[1]);
+  assert.deepEqual(listed,PERSONAL_WORKSPACE_SCOPES);
+  assert.deepEqual(advanced,WORKSPACE_SCOPES);
+  assert(!listed.includes("https://www.googleapis.com/auth/keep"));
+  assert(!listed.includes("https://www.googleapis.com/auth/ediscovery"));
+  assert(!listed.includes("https://www.googleapis.com/auth/admin.directory.user"));
+  assert(html.includes("Authorize broad personal Gmail bundle"));
   const csrf=csrfFrom(html);
   assert(new URLSearchParams([["csrf",csrf],...listed.map(s=>["scope",s])]).toString().length<4096);
   const start=await app.fetch(jar.post("/setup/google/connect",csrf,listed),env);
   assert.equal(start.status,303);
   const scopes=new URL(start.headers.get("Location")).searchParams.get("scope").split(" ");
-  assert.deepEqual(new Set(scopes),new Set([...WORKSPACE_SCOPES,"openid","email"]));
+  assert.deepEqual(new Set(scopes),new Set([...PERSONAL_WORKSPACE_SCOPES,"openid","email"]));
+  const startedAdvanced=await app.fetch(jar.post("/setup/google/connect",csrf,advanced),env);
+  assert.equal(startedAdvanced.status,303);
+  const full=new URL(startedAdvanced.headers.get("Location")).searchParams.get("scope").split(" ");
+  assert.deepEqual(new Set(full),new Set([...WORKSPACE_SCOPES,"openid","email"]));
   assert.equal(mock.calls.workspace,0);
 });
 

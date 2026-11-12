@@ -53,3 +53,38 @@ export const WORKSPACE_SCOPES: readonly string[] =
 
 export const WORKSPACE_SCOPES_SET: ReadonlySet<string> =
   new Set(WORKSPACE_SCOPES);
+
+/**
+ * Broad initial authorization candidate for a personal Gmail account.
+ *
+ * Keep the 39-scope registry intact for eligible Workspace organizations,
+ * but avoid requesting administrator/organization-only functionality from
+ * a consumer identity. A Google consent screen can still reject individual
+ * scopes for policy or product-eligibility reasons; live consent is definitive.
+ * tasks and script.projects write grants subsume their .readonly equivalents
+ * for the current remote read operation catalogue.
+ */
+const PERSONAL_EXCLUSIONS = new Set<string>([
+  "https://www.googleapis.com/auth/tasks.readonly",
+  "https://www.googleapis.com/auth/script.projects.readonly",
+  "https://www.googleapis.com/auth/drive.labels",
+  "https://www.googleapis.com/auth/directory.readonly",
+  "https://www.googleapis.com/auth/chat.spaces",
+  "https://www.googleapis.com/auth/chat.messages",
+  "https://www.googleapis.com/auth/chat.memberships",
+  "https://www.googleapis.com/auth/keep",
+  "https://www.googleapis.com/auth/classroom.courses",
+  "https://www.googleapis.com/auth/classroom.rosters",
+  "https://www.googleapis.com/auth/classroom.coursework.students",
+  "https://www.googleapis.com/auth/classroom.announcements",
+  "https://www.googleapis.com/auth/admin.directory.user",
+  "https://www.googleapis.com/auth/admin.directory.group",
+  "https://www.googleapis.com/auth/apps.groups.settings",
+  "https://www.googleapis.com/auth/ediscovery"
+]);
+
+export const PERSONAL_WORKSPACE_SCOPES: readonly string[] =
+  Object.freeze(WORKSPACE_SCOPES.filter(scope => !PERSONAL_EXCLUSIONS.has(scope)));
+
+export const ORGANIZATION_ONLY_SCOPES: readonly string[] =
+  Object.freeze(WORKSPACE_SCOPES.filter(scope => PERSONAL_EXCLUSIONS.has(scope)));

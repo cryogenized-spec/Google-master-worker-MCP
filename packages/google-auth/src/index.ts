@@ -262,10 +262,9 @@ export class GoogleOAuthBroker {
     const returnedScopes = cleanScopes(
       result.grantedScopes.filter(scope => !IDENTITY_SCOPES.has(scope))
     );
-    if (!scopes.every(scope => returnedScopes.includes(scope))) {
-      throw new OperationError("GOOGLE_REQUIRED_SCOPES_DENIED");
-    }
-    // Never adopt extra Workspace grants from provider scope normalization.
+    // Google supports granular consent. Grant only what the user actually
+    // approved, never every scope the application merely asked for.
+    // Reject extras even if Google unexpectedly returns an unrelated grant.
     if (!returnedScopes.every(scope => scopes.includes(scope))) {
       throw new OperationError("GOOGLE_SCOPES_INVALID");
     }
@@ -276,7 +275,7 @@ export class GoogleOAuthBroker {
       result.accessToken, this.config.allowedSubject, this.request
     );
     // Never implicitly grant tools additional scopes not explicitly requested here.
-    const granted = scopes;
+    const granted = returnedScopes;
     const expiresAt = this.now() + Math.floor(result.expiresIn * 1000);
     const encrypted = await seal(await this.key, "connection:" + pending.account_id, {
       accessToken: result.accessToken, refreshToken: result.refreshToken, expiresAt
