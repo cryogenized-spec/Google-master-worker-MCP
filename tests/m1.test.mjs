@@ -136,6 +136,21 @@ test("Google HTTP keeps provider errors private and blocks URL escapes / oversiz
     accessToken: "secret-access-token" }), /GOOGLE_RESPONSE_TOO_LARGE/);
 });
 
+test("Google HTTP refuses redirects without following external Location", async () => {
+  let calls=0;
+  const client=http(async (_url,init)=>{
+    calls++;
+    assert.equal(init.redirect,"manual");
+    return new Response(null,{status:302,headers:{
+      Location:"https://untrusted.example.test/steal"
+    }});
+  });
+  await assert.rejects(client.json({
+    path:"/tasks/v1/users/@me/lists",accessToken:"FAKE_ACCESS_TOKEN"
+  }),/GOOGLE_REQUEST_REJECTED/);
+  assert.equal(calls,1);
+});
+
 test("local approval is exact, one-use, expiry-bounded and cannot be overwritten live", async () => {
   const dir = await mkdtemp(join(tmpdir(), "gmw-approval-parent-"));
   const privateDir = join(dir, "private");
