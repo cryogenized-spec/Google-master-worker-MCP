@@ -6,6 +6,7 @@ import { OperationRegistry, type Principal } from "../../../packages/core/src/in
 import { GoogleJsonClient } from "../../../packages/google-http/src/index.js";
 import { registerGoogleTasks } from "../../../packages/google-tasks/src/index.js";
 import { registerAppsScript } from "../../../packages/google-apps-script/src/index.js";
+import { registerWorkspaceServices } from "../../../packages/google-workspace/src/index.js";
 import { createMcpServer } from "../../../packages/mcp-adapter/src/index.js";
 import { handleReadOnlyApi, isRestPath, restPreflight, corsOrigin, corsResponse } from "../../../packages/rest-adapter/src/index.js";
 import { createWorkspaceReadSessionStore, scopedMcpClientId, type WorkspaceVaultEnv } from "../../../packages/google-auth/src/worker-session.js";
@@ -40,6 +41,7 @@ function createReadRegistry(env: ProtectedEnv): OperationRegistry {
     new GoogleJsonClient("https://tasks.googleapis.com", "/tasks/v1/"));
   registerAppsScript(registry,
     new GoogleJsonClient("https://script.googleapis.com", "/v1/"));
+  registerWorkspaceServices(registry);
   return registry;
 }
 
