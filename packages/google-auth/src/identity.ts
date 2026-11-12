@@ -21,7 +21,7 @@ export async function verifyAuthorizedGoogleSubject(
     response = await request(GOOGLE_USERINFO_URL, {
       method: "GET",
       headers: {Authorization: "Bearer " + accessToken, Accept: "application/json"},
-      redirect: "error", credentials: "omit", cache: "no-store",
+      redirect: "manual", credentials: "omit", cache: "no-store",
       signal: AbortSignal.timeout(12000)
     });
   } catch {
