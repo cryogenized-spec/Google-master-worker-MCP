@@ -6,6 +6,7 @@ import { createMcpHandler } from "@modelcontextprotocol/server";
 import { OperationRegistry } from "../dist/packages/core/src/index.js";
 import { registerGoogleTasks } from "../dist/packages/google-tasks/src/index.js";
 import { registerAppsScript } from "../dist/packages/google-apps-script/src/index.js";
+import { registerWorkspaceServices } from "../dist/packages/google-workspace/src/index.js";
 import { createMcpServer } from "../dist/packages/mcp-adapter/src/index.js";
 
 const login = {
@@ -108,10 +109,11 @@ test("consent HTML escapes hostile client names, domains, handles and scopes", (
 });
 
 
-test("read-only remote MCP adapter shows exactly seven read tools", async () => {
+test("remote MCP adapter exposes broad read tools but no mutations", async () => {
   const registry = new OperationRegistry({ async get() { return null; } });
   registerGoogleTasks(registry);
   registerAppsScript(registry);
+  registerWorkspaceServices(registry);
   const handler = createMcpHandler(() => createMcpServer(registry, async () => ({
     authenticated:true, clientId:"verified_mcp_client", accountId:"default"
   }), {readOnly:true}), {legacy:"stateless"});
@@ -136,7 +138,11 @@ test("read-only remote MCP adapter shows exactly seven read tools", async () => 
   const contents = await response.text();
   assert.equal(response.status,200,contents);
   const names = JSON.parse(contents).result.tools.map(x=>x.name);
-  assert.equal(names.length,7);
+  assert.equal(names.length,24);
+  assert(names.includes("drive_list_files"));
+  assert(names.includes("gmail_list_messages"));
+  assert(names.includes("calendar_list_events"));
+  assert(names.includes("forms_list_responses"));
   assert(names.includes("script_get_project"));
   assert(names.includes("tasks_list_tasks"));
   assert(!names.some(name=>name.includes("_create") || name.includes("_update")));
