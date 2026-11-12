@@ -4,6 +4,7 @@ import { OperationRegistry } from "../dist/packages/core/src/index.js";
 import { GoogleJsonClient } from "../dist/packages/google-http/src/index.js";
 import { registerGoogleTasks } from "../dist/packages/google-tasks/src/index.js";
 import { registerAppsScript } from "../dist/packages/google-apps-script/src/index.js";
+import { registerWorkspaceServices } from "../dist/packages/google-workspace/src/index.js";
 import {
   handleReadOnlyApi, readOperationCatalogue, corsOrigin, corsResponse,
   restPreflight
@@ -31,6 +32,7 @@ function registryWithFakeGoogle({scopes=["https://www.googleapis.com/auth/tasks.
   registerAppsScript(registry,new GoogleJsonClient(
     "https://script.googleapis.com","/v1/",async()=>{throw Error("SCRIPT API MUST NOT BE CALLED");}
   ));
+  registerWorkspaceServices(registry);
   return registry;
 }
 function post(path,body="{}",extra={}) {
@@ -39,14 +41,16 @@ function post(path,body="{}",extra={}) {
   });
 }
 
-test("REST capability catalogue exposes exactly seven read-only operations",async()=>{
+test("REST capability catalogue exposes broad read-only Google Workspace operations",async()=>{
   const registry=registryWithFakeGoogle();
   const response=await handleReadOnlyApi(
     new Request(ORIGIN+"/v1/capabilities"),registry,principal
   );
   assert.equal(response.status,200);
   const result=await response.json();
-  assert.equal(result.operations.length,7);
+  assert.equal(result.operations.length,24);
+  assert(result.operations.some(o=>o.name==="docs_get_document"));
+  assert(result.operations.some(o=>o.name==="contacts_list_connections"));
   assert(result.operations.every(x=>x.risk==="read"));
   assert(!result.operations.some(x=>/create|update|delete/.test(x.name)));
   assert.deepEqual(result.operations,readOperationCatalogue(registry));
@@ -155,7 +159,7 @@ test("portable TypeScript client uses the typed HTTPS API without leaking a bear
     }
   });
   const catalog=await client.capabilities();
-  assert.equal(catalog.length,7);
+  assert.equal(catalog.length,24);
   const output=await client.call("tasks_list_tasklists",{maxResults:5});
   assert.equal(output.items[0].title,"Workshop");
   assert.equal(calls,2);

@@ -6,7 +6,13 @@
 export const READ_OPERATION_NAMES = [
   "tasks_list_tasklists", "tasks_list_tasks", "tasks_get_task",
   "script_get_project", "script_get_content",
-  "script_list_versions", "script_list_deployments"
+  "script_list_versions", "script_list_deployments",
+  "drive_list_files", "drive_get_file", "drive_query_activity",
+  "docs_get_document", "sheets_get_spreadsheet", "sheets_get_values",
+  "slides_get_presentation", "calendar_list_calendars", "calendar_list_events",
+  "gmail_list_messages", "gmail_get_message", "gmail_list_labels",
+  "contacts_list_connections", "forms_get_form", "forms_list_responses",
+  "meet_list_conferences", "meet_get_space"
 ] as const;
 
 export type ReadOperationName = typeof READ_OPERATION_NAMES[number];
