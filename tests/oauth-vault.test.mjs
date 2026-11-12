@@ -252,6 +252,19 @@ test("personal Workspace bundle stores only actual user-approved scope subset", 
   assert.deepEqual(JSON.parse((await f.store.load("default")).scopes_json),[...approved].sort());
 });
 
+test("granular consent with no Workspace permission does not create a connection", async t => {
+  const f=fixture(); t.after(f.close);
+  const broker=new GoogleOAuthBroker(f.store,config,async url =>
+    url===identityUrl ? identityReply() : tokenReply(undefined,{
+      scope:"openid email"
+    }));
+  const started=await broker.begin(principal,PERSONAL_WORKSPACE_SCOPES);
+  await assert.rejects(broker.complete(
+    new URL(started.authorizationUrl).searchParams.get("state"),"temporary-code"
+  ),/GOOGLE_SCOPES_INVALID/);
+  assert.equal(await f.store.load("default"),null);
+});
+
 test("expired access token refreshes through Google endpoint, preserves refresh token, increments version", async t => {
   const f = fixture(); t.after(f.close);
   let clock = 1000000;
