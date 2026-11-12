@@ -73,10 +73,10 @@ function reply(html: string, status = 200, headers?: Headers): Response {
   out.set("Cache-Control", "no-store");
   out.set("X-Content-Type-Options", "nosniff");
   out.set("X-Frame-Options", "DENY");
-  // A no-referrer policy makes browsers send Origin: null on normal HTML
-  // form POST navigations; csrfOkay requires our exact HTTPS Origin.
-  // same-origin keeps external referrers suppressed and preserves local forms.
-  out.set("Referrer-Policy", "same-origin");
+  // All OAuth callback and redirect responses suppress referrers.
+  // Only the actual operator form page overrides this to same-origin:
+  // no-referrer would make browsers send Origin:null on form POSTs.
+  if (!out.has("Referrer-Policy")) out.set("Referrer-Policy", "no-referrer");
   out.set("Content-Security-Policy",
     "default-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'; style-src 'unsafe-inline'");
   return new Response(html, {status, headers: out});
@@ -370,7 +370,8 @@ export function createSetupApp(
           if (!ctx) return redirect(s.origin+"/setup/login");
           const connected=Boolean(await s.vault.load("default"));
           const status=new URL(request.url).searchParams.get("status") || "";
-          return reply(documentPage(connected,ctx.csrfRaw,status));
+          return reply(documentPage(connected,ctx.csrfRaw,status),200,
+            new Headers({"Referrer-Policy":"same-origin"}));
         }
         if (pathname==="/setup/google/connect" && request.method==="POST") {
           return await startLink(request,s,now);
