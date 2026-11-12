@@ -1,6 +1,6 @@
 import { OperationError } from "../../../packages/core/src/index.js";
 import { GoogleOAuthBroker, type GoogleOAuthConfig } from "../../../packages/google-auth/src/index.js";
-import { WORKSPACE_SCOPES } from "../../../packages/google-auth/src/scopes.js";
+import { WORKSPACE_SCOPES, PERSONAL_WORKSPACE_SCOPES } from "../../../packages/google-auth/src/scopes.js";
 import { OwnerBrowserStore, type OwnerSession } from "../../../packages/google-auth/src/browser-store.js";
 import { GoogleOAuthStore, type D1DatabaseLike } from "../../../packages/google-auth/src/store.js";
 import {
@@ -250,15 +250,22 @@ function documentPage(connected:boolean, csrf:string, status:string): string {
     '<button type="submit">Revoke Google grant and disconnect</button></form>'
   ):(
     '<p>Google Workspace vault: <strong>Not connected</strong></p>'+
-    '<p>This requests the complete registered Workspace OAuth scope bundle in one consent session. '+
-    'Google account eligibility and API access restrictions still apply. '+
+    '<p>For personal Gmail: one broad consent for '+PERSONAL_WORKSPACE_SCOPES.length+
+    ' proposed scopes across Tasks, Apps Script, Drive, Docs, Sheets, Slides, Calendar, Gmail, Contacts, Forms, and Meet. '+
+    'Google may still withhold permissions; only granted scopes will be stored. '+
     'Cloudflare MCP operations remain separately controlled.</p>'+
     '<form method="post" action="/setup/google/connect"><input type="hidden" name="csrf" value="'+htmlEscape(csrf)+'">'+
-    WORKSPACE_SCOPES.map(scope => '<input type="hidden" name="scope" value="'+htmlEscape(scope)+'">').join('')+
-    '<details><summary>Review all '+WORKSPACE_SCOPES.length+' requested scopes</summary><ul>'+
-    WORKSPACE_SCOPES.map(scope => '<li>'+htmlEscape(scope)+'</li>').join('')+
+    PERSONAL_WORKSPACE_SCOPES.map(scope => '<input type="hidden" name="scope" value="'+htmlEscape(scope)+'">').join('')+
+    '<details><summary>Review '+PERSONAL_WORKSPACE_SCOPES.length+' personal-account scopes</summary><ul>'+
+    PERSONAL_WORKSPACE_SCOPES.map(scope => '<li>'+htmlEscape(scope)+'</li>').join('')+
     '</ul></details>'+
-    '<p><button type="submit">Authorize complete Google Workspace bundle</button></p></form>'
+    '<p><button type="submit">Authorize broad personal Gmail bundle</button></p></form>'+
+    '<details><summary>Advanced: Google Workspace organization permissions</summary>'+
+    '<p>Only for eligible managed Workspace accounts. Personal Gmail cannot grant organization '+
+    'administrator, Vault, enterprise Keep or certain Chat/Classroom scopes.</p>'+
+    '<form method="post" action="/setup/google/connect"><input type="hidden" name="csrf" value="'+htmlEscape(csrf)+'">'+
+    WORKSPACE_SCOPES.map(scope => '<input type="hidden" name="scope" value="'+htmlEscape(scope)+'">').join('')+
+    '<p><button type="submit">Request all '+WORKSPACE_SCOPES.length+' scopes (managed Workspace)</button></p></form></details>'
   );
   return '<!doctype html><html lang="en"><head><meta charset="utf-8">'+
     '<meta name="viewport" content="width=device-width,initial-scale=1">'+
