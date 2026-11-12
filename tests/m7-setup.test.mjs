@@ -194,6 +194,7 @@ test("browser OAuth login and Workspace consent bind to one verified session, ne
   const html=await rendered.text();
   assert.equal(rendered.status,200);
   assert(html.includes("Connected"));
+  assert(html.includes("1 granted scopes"));
   assert(!html.includes("TEST_WORKSPACE_ACCESS_TOKEN"));
   assert(!html.includes("TEST_WORKSPACE_REFRESH_TOKEN"));
   assert(!JSON.stringify([...jar.cookies]).includes("TEST_WORKSPACE"));
