@@ -42,7 +42,7 @@ export class GoogleJsonClient {
     let response: Response;
     try {
       response = await this.request(url.href, {
-        method, redirect: "error", credentials: "omit", cache: "no-store",
+        method, redirect: "manual", credentials: "omit", cache: "no-store",
         signal: AbortSignal.timeout(15000),
         headers: {
           Authorization: "Bearer " + accessToken,
