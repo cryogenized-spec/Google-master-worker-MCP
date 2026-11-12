@@ -240,12 +240,12 @@ async function finishLogin(
     cookie(CSRF_COOKIE,csrf,3600)
   ]);
 }
-function documentPage(connected:boolean, csrf:string, status:string): string {
+function documentPage(connected:boolean, csrf:string, status:string, grantedCount=0): string {
   const statusText = status === "connected" ? "Workspace connected successfully." :
     status === "cancelled" ? "Authorization cancelled." :
     status === "disconnected" ? "Stored connection disconnected and revoked." : "";
   const connect = connected ? (
-    '<p>Google Workspace vault: <strong>Connected</strong></p>'+
+    '<p>Google Workspace vault: <strong>Connected</strong> ('+grantedCount+' granted scopes)</p>'+
     '<form method="post" action="/setup/disconnect"><input type="hidden" name="csrf" value="'+htmlEscape(csrf)+'">'+
     '<button type="submit">Revoke Google grant and disconnect</button></form>'
   ):(
@@ -375,9 +375,12 @@ export function createSetupApp(
         if (pathname==="/setup" && request.method==="GET") {
           const ctx=await owner(request,s,now);
           if (!ctx) return redirect(s.origin+"/setup/login");
-          const connected=Boolean(await s.vault.load("default"));
+          const record=await s.vault.load("default");
+          const connected=Boolean(record);
+          const scopeList=record ? JSON.parse(record.scopes_json) as unknown : [];
+          const grantedCount=Array.isArray(scopeList) ? scopeList.length : 0;
           const status=new URL(request.url).searchParams.get("status") || "";
-          return reply(documentPage(connected,ctx.csrfRaw,status),200,
+          return reply(documentPage(connected,ctx.csrfRaw,status,grantedCount),200,
             new Headers({"Referrer-Policy":"same-origin"}));
         }
         if (pathname==="/setup/google/connect" && request.method==="POST") {
