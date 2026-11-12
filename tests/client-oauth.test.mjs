@@ -66,6 +66,31 @@ test("Operator OIDC login fails closed for wrong identity, unverified email and 
     /IDENTITY_LOGIN_INVALID/);
 });
 
+test("Google operator login refuses HTTP redirects without following a Location", async () => {
+  const redirect = () => new Response(null, {
+    status: 302, headers: { Location: "https://untrusted.example.test/steal" }
+  });
+  let firstCalls = 0;
+  await assert.rejects(verifyGoogleLogin("code", "A".repeat(64), login,
+    async (_url, init) => {
+      firstCalls++;
+      assert.equal(init.redirect, "manual");
+      return redirect();
+    }), /IDENTITY_LOGIN_DENIED/);
+  assert.equal(firstCalls, 1);
+
+  let secondCalls = 0;
+  await assert.rejects(verifyGoogleLogin("code", "A".repeat(64), login,
+    async (url, init) => {
+      secondCalls++;
+      assert.equal(init.redirect, "manual");
+      return url.endsWith("/token")
+        ? Response.json({access_token:"FAKE_LONG_TOKEN_123", token_type:"Bearer"})
+        : redirect();
+    }), /IDENTITY_LOGIN_DENIED/);
+  assert.equal(secondCalls, 2);
+});
+
 test("consent HTML escapes hostile client names, domains, handles and scopes", () => {
   const markup = renderConsent({
     clientName:'<script>alert("bad")</script>',
