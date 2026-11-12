@@ -73,7 +73,10 @@ function reply(html: string, status = 200, headers?: Headers): Response {
   out.set("Cache-Control", "no-store");
   out.set("X-Content-Type-Options", "nosniff");
   out.set("X-Frame-Options", "DENY");
-  out.set("Referrer-Policy", "no-referrer");
+  // A no-referrer policy makes browsers send Origin: null on normal HTML
+  // form POST navigations; csrfOkay requires our exact HTTPS Origin.
+  // same-origin keeps external referrers suppressed and preserves local forms.
+  out.set("Referrer-Policy", "same-origin");
   out.set("Content-Security-Policy",
     "default-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'; style-src 'unsafe-inline'");
   return new Response(html, {status, headers: out});
