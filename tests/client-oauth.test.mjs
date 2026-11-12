@@ -20,7 +20,7 @@ test("Operator OIDC login exchanges code with PKCE and validates Google's stable
   const reply = async (url, options) => {
     seen.push({url,options});
     assert.equal(options.credentials, "omit");
-    assert.equal(options.redirect,"error");
+    assert.equal(options.redirect, "manual");
     if (url === "https://oauth2.googleapis.com/token") {
       assert.equal(options.method,"POST");
       const fields = new URLSearchParams(options.body);
@@ -64,6 +64,31 @@ test("Operator OIDC login fails closed for wrong identity, unverified email and 
   assert.equal(validLoginConfig({...login,allowedSubject:"owner@example.test"}),false);
   await assert.rejects(verifyGoogleLogin("code","short",login,fake),
     /IDENTITY_LOGIN_INVALID/);
+});
+
+test("Google operator login refuses HTTP redirects without following a Location", async () => {
+  const redirect = () => new Response(null, {
+    status: 302, headers: { Location: "https://untrusted.example.test/steal" }
+  });
+  let firstCalls = 0;
+  await assert.rejects(verifyGoogleLogin("code", "A".repeat(64), login,
+    async (_url, init) => {
+      firstCalls++;
+      assert.equal(init.redirect, "manual");
+      return redirect();
+    }), /IDENTITY_LOGIN_DENIED/);
+  assert.equal(firstCalls, 1);
+
+  let secondCalls = 0;
+  await assert.rejects(verifyGoogleLogin("code", "A".repeat(64), login,
+    async (url, init) => {
+      secondCalls++;
+      assert.equal(init.redirect, "manual");
+      return url.endsWith("/token")
+        ? Response.json({access_token:"FAKE_LONG_TOKEN_123", token_type:"Bearer"})
+        : redirect();
+    }), /IDENTITY_LOGIN_DENIED/);
+  assert.equal(secondCalls, 2);
 });
 
 test("consent HTML escapes hostile client names, domains, handles and scopes", () => {

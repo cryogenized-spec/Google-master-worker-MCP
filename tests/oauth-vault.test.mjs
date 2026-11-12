@@ -138,7 +138,7 @@ test("callback consumes state once, exchanges code with PKCE, encrypts tokens, e
     exchanges++;
     assert.equal(url, "https://oauth2.googleapis.com/token");
     assert.equal(options.method, "POST");
-    assert.equal(options.redirect, "error");
+    assert.equal(options.redirect, "manual");
     assert.equal(options.credentials, "omit");
     const data = new URLSearchParams(options.body);
     assert.equal(data.get("grant_type"), "authorization_code");
@@ -194,6 +194,25 @@ test("callback cannot redeem expired state, unknown scope or a replayed state", 
   assert.equal(httpCalls, 0);
   await assert.rejects(broker.complete("invalid", "test-code"),
     /GOOGLE_OAUTH_CALLBACK_INVALID/);
+});
+
+test("Workspace token exchange rejects provider redirects without saving credentials", async t => {
+  const f=fixture(); t.after(f.close);
+  let requests=0;
+  const broker=new GoogleOAuthBroker(f.store,config,async (url,options)=>{
+    requests++;
+    assert.equal(url,"https://oauth2.googleapis.com/token");
+    assert.equal(options.redirect,"manual");
+    return new Response(null,{status:302,headers:{
+      Location:"https://untrusted.example.test/steal"
+    }});
+  });
+  const flow=await broker.begin(principal,[requested]);
+  await assert.rejects(broker.complete(
+    new URL(flow.authorizationUrl).searchParams.get("state"),"disposable-code"
+  ),/GOOGLE_OAUTH_TOKEN_REJECTED/);
+  assert.equal(requests,1);
+  assert.equal(await f.store.load("default"),null);
 });
 
 test("missing offline refresh token and denied scopes never create a connection", async t => {

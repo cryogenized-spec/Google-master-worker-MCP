@@ -81,7 +81,7 @@ export async function verifyGoogleLogin(
     tokenResponse = await request(TOKEN_ENDPOINT, {
       method: "POST", body: form.toString(),
       headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
-      redirect: "error", credentials: "omit", cache: "no-store",
+      redirect: "manual", credentials: "omit", cache: "no-store",
       signal: AbortSignal.timeout(12000)
     });
   } catch { fail("IDENTITY_PROVIDER_UNAVAILABLE"); }
@@ -96,7 +96,7 @@ export async function verifyGoogleLogin(
   let identityResponse: Response;
   try {
     identityResponse = await request(USERINFO_ENDPOINT, {
-      method: "GET", redirect: "error", credentials: "omit", cache: "no-store",
+      method: "GET", redirect: "manual", credentials: "omit", cache: "no-store",
       signal: AbortSignal.timeout(12000),
       headers: { Authorization: "Bearer " + token.access_token, Accept: "application/json" }
     });

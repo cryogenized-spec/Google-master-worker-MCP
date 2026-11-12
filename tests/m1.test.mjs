@@ -42,7 +42,7 @@ test("Tasks read uses fixed Google host, bounded projection, and per-account sco
     calls.push({ url, options });
     assert.match(options.headers.Authorization, /^Bearer /);
     assert.equal(options.credentials, "omit");
-    assert.equal(options.redirect, "error");
+    assert.equal(options.redirect, "manual");
     assert.equal(options.method, "GET");
     if (String(url).includes("/users/@me/lists")) return response({
       items: [{ id: "l1", title: "Workshop", updated: "2026-11-10",
@@ -134,6 +134,21 @@ test("Google HTTP keeps provider errors private and blocks URL escapes / oversiz
   const huge = http(async () => new Response(JSON.stringify({ data: "x".repeat(262145) })));
   await assert.rejects(huge.json({ path: "/tasks/v1/users/@me/lists",
     accessToken: "secret-access-token" }), /GOOGLE_RESPONSE_TOO_LARGE/);
+});
+
+test("Google HTTP refuses redirects without following external Location", async () => {
+  let calls=0;
+  const client=http(async (_url,init)=>{
+    calls++;
+    assert.equal(init.redirect,"manual");
+    return new Response(null,{status:302,headers:{
+      Location:"https://untrusted.example.test/steal"
+    }});
+  });
+  await assert.rejects(client.json({
+    path:"/tasks/v1/users/@me/lists",accessToken:"FAKE_ACCESS_TOKEN"
+  }),/GOOGLE_REQUEST_REJECTED/);
+  assert.equal(calls,1);
 });
 
 test("local approval is exact, one-use, expiry-bounded and cannot be overwritten live", async () => {
