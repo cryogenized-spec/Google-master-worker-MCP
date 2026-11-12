@@ -79,7 +79,7 @@ function googleMock(overrides={}) {
   const calls={login:0,workspace:0,identity:0,revoke:0};
   const fetchImpl=async(url,options)=>{
     if(url==="https://oauth2.googleapis.com/token"){
-      assert.equal(options.redirect,"error");
+      assert.equal(options.redirect, "manual");
       assert.equal(options.credentials,"omit");
       const form=new URLSearchParams(options.body);
       if(form.get("code")==="owner-login-code"){
