@@ -42,7 +42,7 @@ test("Tasks read uses fixed Google host, bounded projection, and per-account sco
     calls.push({ url, options });
     assert.match(options.headers.Authorization, /^Bearer /);
     assert.equal(options.credentials, "omit");
-    assert.equal(options.redirect, "error");
+    assert.equal(options.redirect, "manual");
     assert.equal(options.method, "GET");
     if (String(url).includes("/users/@me/lists")) return response({
       items: [{ id: "l1", title: "Workshop", updated: "2026-11-10",
