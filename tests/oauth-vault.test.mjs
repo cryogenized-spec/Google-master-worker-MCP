@@ -138,7 +138,7 @@ test("callback consumes state once, exchanges code with PKCE, encrypts tokens, e
     exchanges++;
     assert.equal(url, "https://oauth2.googleapis.com/token");
     assert.equal(options.method, "POST");
-    assert.equal(options.redirect, "error");
+    assert.equal(options.redirect, "manual");
     assert.equal(options.credentials, "omit");
     const data = new URLSearchParams(options.body);
     assert.equal(data.get("grant_type"), "authorization_code");
