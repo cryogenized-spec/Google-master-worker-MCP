@@ -217,7 +217,9 @@ test("operator setup offers a single complete Workspace consent request",async t
   const mock=googleMock();
   const app=createSetupApp({googleFetch:mock.fetchImpl});
   const env=environment(f.DB),jar=new BrowserJar();
-  await login(app,env,jar);
+  const signedIn=await login(app,env,jar);
+  assert.equal(signedIn.start.headers.get("Referrer-Policy"),"no-referrer");
+  assert.equal(signedIn.back.headers.get("Referrer-Policy"),"no-referrer");
   const page=await app.fetch(jar.request("/setup"),env);
   // Real HTML form navigation needs the browser to send a non-null Origin.
   // no-referrer forces Origin:null for a form POST despite being same-site.
