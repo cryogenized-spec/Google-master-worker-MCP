@@ -10,6 +10,7 @@ import { GoogleOAuthStore } from "../dist/packages/google-auth/src/store.js";
 import {
   GoogleOAuthBroker
 } from "../dist/packages/google-auth/src/index.js";
+import { PERSONAL_WORKSPACE_SCOPES } from "../dist/packages/google-auth/src/scopes.js";
 import { WORKSPACE_SCOPES } from "../dist/packages/google-auth/src/scopes.js";
 
 const requested = "https://www.googleapis.com/auth/tasks.readonly";
@@ -232,6 +233,23 @@ test("missing refresh token and unexpected provider scopes never create a connec
     /GOOGLE_SCOPES_INVALID/
   );
   assert.equal(await f.store.load("default"), null);
+});
+
+test("personal Workspace bundle stores only actual user-approved scope subset", async t => {
+  const f=fixture(); t.after(f.close);
+  const approved=[requested,"https://www.googleapis.com/auth/drive"];
+  const broker=new GoogleOAuthBroker(f.store,config,async url =>
+    url===identityUrl ? identityReply() : tokenReply(undefined,{
+      scope:[...approved,"openid","email"].join(" ")
+    }));
+  assert.equal(PERSONAL_WORKSPACE_SCOPES.length,23);
+  const started=await broker.begin(principal,PERSONAL_WORKSPACE_SCOPES);
+  const proposed=new URL(started.authorizationUrl).searchParams.get("scope").split(" ");
+  assert.deepEqual(new Set(proposed),new Set([...PERSONAL_WORKSPACE_SCOPES,"openid","email"]));
+  const state=new URL(started.authorizationUrl).searchParams.get("state");
+  const saved=await broker.complete(state,"code");
+  assert.deepEqual(saved.scopes,[...approved].sort());
+  assert.deepEqual(JSON.parse((await f.store.load("default")).scopes_json),[...approved].sort());
 });
 
 test("expired access token refreshes through Google endpoint, preserves refresh token, increments version", async t => {
