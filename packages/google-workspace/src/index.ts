@@ -12,7 +12,8 @@ import { GoogleJsonClient } from "../../google-http/src/index.js";
 const ROOT = "https://www.googleapis.com/auth/";
 const scope = (s: string) => ROOT + s;
 const id = z.string().min(1).max(512)
-  .refine(s => !/[\u0000-\u001f]/.test(s) && s !== "." && s !== "..");
+  .refine(s => !/[\u0000-\u001f]/.test(s) && !s.includes("/") && !s.includes("\\") &&
+    !s.includes("..") && s !== ".");
 const text = (max = 512) => z.string().max(max);
 const page = z.number().int().min(1).max(100).default(25);
 const token = z.string().max(1024).optional();
