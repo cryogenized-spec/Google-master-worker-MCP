@@ -12,8 +12,9 @@ import { GoogleJsonClient, type QueryValue } from "../../google-http/src/index.j
  */
 
 const scope = (name: string) => "https://www.googleapis.com/auth/" + name;
-const ident = z.string().min(1).max(512).regex(/^[A-Za-z0-9_.-]+$/)
-  .refine(value => value !== "." && value !== ".." && !value.includes(".."));
+const ident = z.string().min(1).max(512).refine(value =>
+  !/[\u0000-\u001f/\\]/.test(value) &&
+  value !== "." && value !== ".." && !value.includes(".."));
 const page = z.number().int().min(1).max(50).default(20);
 const cursor = z.string().max(1024).optional();
 const queryText = (max: number) => z.string().min(1).max(max).optional();
@@ -330,6 +331,8 @@ export function registerGoogleReadCatalogue(
           query.pageToken=input.pageToken as string|undefined;
         }
         for(const key of Object.keys(spec.options??{})){
+          // A path parameter is not also a provider query option.
+          if(spec.path.includes(":"+key)) continue;
           const v=input[key];
           if(typeof v==="string" || typeof v==="number" || typeof v==="boolean"){
             query[key]=v;
