@@ -10,6 +10,37 @@ export interface GoogleRequest {
   readonly body?: unknown;
 }
 
+/**
+ * The public MCP error must never include an upstream exception message: Google
+ * URLs, credentials or runtime details can appear in those strings. Collapse
+ * known Worker/request failures into a small, content-free diagnostic category.
+ * Unknown network failures stay a generic unavailable error.
+ */
+export function classifyGoogleFetchFailure(error: unknown): string {
+  if (!error || typeof error !== "object") return "GOOGLE_NETWORK_UNAVAILABLE";
+  const kind = "name" in error && typeof error.name === "string"
+    ? error.name : "";
+  const message = "message" in error && typeof error.message === "string"
+    ? error.message : "";
+  if (kind === "TimeoutError" || kind === "AbortError" ||
+      /(?:^|\\W)(?:timed out|timeout|deadline exceeded)(?:$|\\W)/i.test(message)) {
+    return "GOOGLE_FETCH_TIMEOUT";
+  }
+  if (/unsupported cache mode|cache.*field.*not implemented/i.test(message)) {
+    return "GOOGLE_FETCH_CACHE_UNSUPPORTED";
+  }
+  if (/redirect.*(?:not implemented|unsupported|invalid)/i.test(message)) {
+    return "GOOGLE_FETCH_REDIRECT_UNSUPPORTED";
+  }
+  if (/outside.*request|request context|I\\/O.*(?:not allowed|context)|global scope|illegal invocation/i.test(message)) {
+    return "GOOGLE_FETCH_CONTEXT_UNAVAILABLE";
+  }
+  if (kind === "TypeError") {
+    return "GOOGLE_FETCH_TYPE_ERROR";
+  }
+  return "GOOGLE_NETWORK_UNAVAILABLE";
+}
+
 export class GoogleJsonClient {
   constructor(
     private readonly origin: string,
@@ -51,8 +82,9 @@ export class GoogleJsonClient {
         },
         ...(body === undefined ? {} : { body: JSON.stringify(body) })
       });
-    } catch {
-      throw new OperationError("GOOGLE_NETWORK_UNAVAILABLE");
+    } catch (error) {
+      // Classification is deliberately not based on returning provider text.
+      throw new OperationError(classifyGoogleFetchFailure(error));
     }
     if (!response.ok) {
       const code = response.status === 401 ? "GOOGLE_UNAUTHORIZED" :
