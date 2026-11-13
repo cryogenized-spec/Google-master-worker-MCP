@@ -9,7 +9,6 @@ import { registerAppsScript } from "../../../packages/google-apps-script/src/ind
 import { registerWorkspaceServices } from "../../../packages/google-workspace/src/index.js";
 import { registerGoogleReadCatalogue } from "../../../packages/google-read-catalogue/src/index.js";
 import { registerGoogleWriteCatalogue } from "../../../packages/google-write-catalogue/src/index.js";
-import { D1WriteApprovals, registerWriteApprovalPreparation } from "../../../packages/google-approvals/src/index.js";
 import { createMcpServer } from "../../../packages/mcp-adapter/src/index.js";
 import { handleReadOnlyApi, isRestPath, restPreflight, corsOrigin, corsResponse } from "../../../packages/rest-adapter/src/index.js";
 import { createWorkspaceReadSessionStore, scopedMcpClientId, type WorkspaceVaultEnv } from "../../../packages/google-auth/src/worker-session.js";
@@ -41,29 +40,26 @@ function createReadRegistry(env: ProtectedEnv): OperationRegistry {
   // A client token cannot activate Google reads. The D1 session remains
   // independently gated by GMW_WORKSPACE_READS_ENABLED and Google consent.
   const writesEnabled=env.GMW_WRITES_ENABLED==="true";
-  const approval=writesEnabled
-    ? new D1WriteApprovals(env.DB!,env.GMW_TOKEN_ENC_KEY||"")
-    : undefined;
-  const registry = new OperationRegistry(createWorkspaceReadSessionStore(env),approval);
+  // Token validation below requires mcp:write before clients reach this
+  // registry when writes are enabled; Google scopes remain checked per operation.
+  const registry = new OperationRegistry(createWorkspaceReadSessionStore(env),
+    writesEnabled ? "direct" : undefined);
   registerGoogleTasks(registry,
     new GoogleJsonClient("https://tasks.googleapis.com", "/tasks/v1/"));
   registerAppsScript(registry,
     new GoogleJsonClient("https://script.googleapis.com", "/v1/"));
   registerWorkspaceServices(registry);
   registerGoogleReadCatalogue(registry);
-  if(writesEnabled && approval){
-    registerGoogleWriteCatalogue(registry);
-    registerWriteApprovalPreparation(registry,approval,
-      new URL(env.GOOGLE_WORKSPACE_REDIRECT_URI||"").origin);
-  }
+  if(writesEnabled) registerGoogleWriteCatalogue(registry);
   return registry;
 }
 
 function bearerChallenge(env: ProtectedEnv, error: string, status = 401): Response {
   const canonical = new URL(env.MCP_RESOURCE_URL);
   const metadata = canonical.origin + "/.well-known/oauth-protected-resource/mcp";
+  const demanded=env.GMW_WRITES_ENABLED==="true" ? "mcp:read mcp:write" : "mcp:read";
   const header = 'Bearer realm="Google Master Worker", error="' + error +
-    '", resource_metadata="' + metadata + '", scope="mcp:read"';
+    '", resource_metadata="' + metadata + '", scope="' + demanded + '"';
   return new Response(JSON.stringify({error: error.toUpperCase()}), {
     status,
     headers: {
@@ -100,7 +96,8 @@ async function protectedReadApi(
       !auth.clientId || typeof auth.clientId !== "string") {
     return bearerChallenge(env, "invalid_token");
   }
-  if (!Array.isArray(auth.scope) || !auth.scope.includes("mcp:read")) {
+  if (!Array.isArray(auth.scope) || !auth.scope.includes("mcp:read") ||
+      (env.GMW_WRITES_ENABLED==="true" && !auth.scope.includes("mcp:write"))) {
     return bearerChallenge(env, "insufficient_scope", 403);
   }
   if (auth.userId !== "owner" ||
@@ -132,7 +129,7 @@ async function protectedReadApi(
     {writesEnabled:env.GMW_WRITES_ENABLED==="true"});
 }
 
-/** Read-only OAuth resource. Google access requires a separate encrypted vault connection and explicit opt-in. */
+/** Owner OAuth resource: writes require a one-time client mcp:write grant. */
 export function createProtectedResource(env: ProtectedEnv) {
   return new OAuthResourceServer<ProtectedEnv, AuthProps>({
     resourceMetadata: {
@@ -140,12 +137,15 @@ export function createProtectedResource(env: ProtectedEnv) {
       authorization_servers: [env.AUTH_ISSUER],
       resource_name: "Google Master Worker (private)"
     },
-    requiredScopes: ["mcp:read"],
+    requiredScopes: env.GMW_WRITES_ENABLED==="true"
+      ? ["mcp:read","mcp:write"] : ["mcp:read"],
     validateToken: env => env.AUTH_SERVER.validateToken,
     handler: {
       async fetch(request, _env, ctx) {
-        if (!ctx.auth.scope.includes("mcp:read")) {
-          return insufficientScope(ctx.auth, ["mcp:read"]);
+        const required=_env.GMW_WRITES_ENABLED==="true"
+          ? ["mcp:read","mcp:write"] : ["mcp:read"];
+        if (required.some(scope => !ctx.auth.scope.includes(scope))) {
+          return insufficientScope(ctx.auth, required);
         }
         // The auth server must have independently verified the allowed Google sub.
         if (ctx.props.userId !== "owner" || ctx.props.accountId !== "default" ||
