@@ -9,9 +9,9 @@ response bodies and administrative account requirements; "every imaginable
 read" is not a finite set. Instead M22 adds named, supported read workflows
 across **every personal-account product represented in our OAuth profile**.
 
-The existing 24 read operations remain unchanged. M22 adds 70 fixed Google
+The existing 24 read operations remain unchanged. M22 adds 76 fixed Google
 GET operations plus the explicitly specified side-effect-free Calendar
-freeBusy POST query: **95 total remote read operations**.
+freeBusy POST query: **101 total remote read operations**.
 
 | Product | New read workflows |
 | --- | --- |
@@ -55,7 +55,7 @@ present in M19.
 
 ## Test plan
 
-1. Unit tests must check 70 GET descriptors have unique names, pinned
+1. Unit tests must check 76 GET descriptors have unique names, pinned
    provider origins, and at least one scope granted by the current 23-scope
    personal profile.
 2. Every new GET operation must be invoked through the typed operation
@@ -65,7 +65,7 @@ present in M19.
 4. Strict input tests must reject traversal, arbitrary URLs, client-supplied
    access tokens, extra fields and invalid time parameters.
 5. Scope test must reject under-scoped calls before Google network I/O.
-6. Cloudflare workerd runtime acceptance checks 95-tool MCP discovery and
+6. Cloudflare workerd runtime acceptance checks 101-tool MCP discovery and
    REST capabilities; Node/TypeScript build and bundle dry runs must pass.
 7. After an operator-controlled M22 production deployment, use the **same
    Google Master MCP connector** to smoke test representative reads for each
