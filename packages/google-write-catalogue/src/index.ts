@@ -124,6 +124,9 @@ add("drive_create_reply","drive","POST","/drive/v3/files/:fileId/comments/:comme
   content:z.string().min(1).max(4000)
 },x=>({content:x.content}),{fields:"id,content,createdTime"});
 add("drive_delete_reply","drive","DELETE","/drive/v3/files/:fileId/comments/:commentId/replies/:replyId",D,"destructive",empty);
+add("drive_update_reply","drive","PATCH","/drive/v3/files/:fileId/comments/:commentId/replies/:replyId",D,"external",{
+  content:z.string().min(1).max(4000)
+},x=>({content:x.content}),{fields:"id,content,modifiedTime"});
 add("drive_delete_revision","drive","DELETE","/drive/v3/files/:fileId/revisions/:revisionId",D,"destructive",empty);
 
 /** Docs & Sheets & Slides batchUpdates: bounded, exact JSON approved by owner. */
@@ -163,6 +166,9 @@ add("calendar_patch_event","calendar","PATCH","/calendar/v3/calendars/:calendarI
   ...(x.start?{start:{dateTime:x.start}}:{}),...(x.end?{end:{dateTime:x.end}}:{}),
   status:x.status}),{sendUpdates:"none"});
 add("calendar_delete_event","calendar","DELETE","/calendar/v3/calendars/:calendarId/events/:eventId",CAL,"destructive",empty,undefined,{sendUpdates:"none"});
+add("calendar_move_event","calendar","POST","/calendar/v3/calendars/:calendarId/events/:eventId/move",CAL,"external",{
+  destination:itemId
+},()=>({}),x=>({destination:x.destination as string,sendUpdates:"none"}));
 add("calendar_create_calendar","calendar","POST","/calendar/v3/calendars",CAL,"write",{
   summary:label,timeZone:z.string().min(1).max(80).optional(),
   description:description.optional()
@@ -214,12 +220,14 @@ add("gmail_batch_modify_messages","gmail","POST","/gmail/v1/users/me/messages/ba
 },x=>({ids:x.ids,addLabelIds:x.addLabelIds,removeLabelIds:x.removeLabelIds}));
 add("gmail_trash_message","gmail","POST","/gmail/v1/users/me/messages/:messageId/trash",GM,"destructive",empty);
 add("gmail_untrash_message","gmail","POST","/gmail/v1/users/me/messages/:messageId/untrash",GM,"write",empty);
-add("gmail_delete_message","gmail","DELETE","/gmail/v1/users/me/messages/:messageId",GM,"destructive",empty);
+// Gmail messages.delete requires the separately restricted full-mail scope,
+ // absent from the 23-scope personal grant. Trash is the supported alternative.
 add("gmail_modify_thread","gmail","POST","/gmail/v1/users/me/threads/:threadId/modify",GM,"write",labelChange,
  x=>({addLabelIds:x.addLabelIds,removeLabelIds:x.removeLabelIds}));
 add("gmail_trash_thread","gmail","POST","/gmail/v1/users/me/threads/:threadId/trash",GM,"destructive",empty);
 add("gmail_untrash_thread","gmail","POST","/gmail/v1/users/me/threads/:threadId/untrash",GM,"write",empty);
-add("gmail_delete_thread","gmail","DELETE","/gmail/v1/users/me/threads/:threadId",GM,"destructive",empty);
+// Gmail threads.delete requires https://mail.google.com/; don't advertise
+ // inaccessible permanent deletion under gmail.modify. Trash remains available.
 add("gmail_set_vacation","gmail","PUT","/gmail/v1/users/me/settings/vacation",GSET,"external",{
   enableAutoReply:z.boolean(),responseSubject:z.string().max(250).optional(),
   responseBodyPlainText:description.optional(),restrictToContacts:z.boolean().optional()
