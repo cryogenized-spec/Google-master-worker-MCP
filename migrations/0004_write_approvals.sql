@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS google_write_approvals (
   input_digest TEXT NOT NULL,
   input_enc TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'pending'
-    CHECK(status IN ('pending','approved','consumed')),
+    CHECK(status IN ('pending','approved','rejected','consumed')),
   created_at INTEGER NOT NULL,
   expires_at INTEGER NOT NULL,
   approved_at INTEGER,
