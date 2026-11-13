@@ -216,7 +216,8 @@ export function verifyConfigs(configs) {
         setup.vars.GOOGLE_WORKSPACE_REDIRECT_URI !== urls.setupRedirect ||
         mcp.vars.GOOGLE_WORKSPACE_REDIRECT_URI !== urls.setupRedirect ||
         mcp.vars.GMW_WORKSPACE_READS_ENABLED !== "false" ||
-        mcp.vars.GMW_WRITES_ENABLED !== "false") {
+        (mcp.vars.GMW_WRITES_ENABLED !== undefined &&
+         mcp.vars.GMW_WRITES_ENABLED !== "false")) {
       throw Error("URI mismatch");
     }
   } catch {
