@@ -6,7 +6,7 @@ A personal, TypeScript-first Google Workspace integration platform intended to s
 
 ## Implemented
 
-- **M22 comprehensive read catalogue:** 70 fixed GET endpoints plus one bounded Calendar freeBusy query extend M19's 24 operations to **95 typed, read-only remote MCP tools** across Tasks, Apps Script, Drive, Docs, Sheets, Slides, Calendar, Gmail, Contacts, Forms and Meet. Five selected typed write/external operations remain registered only in the core and are not remotely callable without independent action approval.
+- **M22 comprehensive read catalogue:** 76 fixed GET endpoints plus one bounded Calendar freeBusy query extend M19's 24 operations to **101 typed, read-only remote MCP tools** across Tasks, Apps Script, Drive, Docs, Sheets, Slides, Calendar, Gmail, Contacts, Forms and Meet. Five selected typed write/external operations remain registered only in the core and are not remotely callable without independent action approval.
 - Shared TypeScript operation registry, strict input/output schemas, per-account Google scope checks, bounded REST transport and redacted errors.
 - Cloudflare Worker gateway development prototype plus a split, resource-scoped MCP OAuth authorization Worker and read-only protected MCP Worker.
 - Google operator authentication by verified Google OIDC subject, per-client browser consent, protected OAuth tokens and separated Google Workspace authorization.
