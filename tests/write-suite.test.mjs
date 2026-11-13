@@ -182,3 +182,55 @@ test("Approval expiry and queue limits fail closed",async t=>{
     /APPROVAL_EXPIRED_OR_ALREADY_DECIDED/);
   await assert.rejects(f.store.consume(action),/WRITE_APPROVAL_REQUIRED/);
 });
+
+
+test("Representative Google mutation routes use correct verbs, colon action suffixes and scoped bodies",async t=>{
+  const f=fixture();t.after(f.close);
+  const {registry,requests}=mock({},f.store);
+  registerWriteApprovalPreparation(registry,f.store,origin);
+  const cases=[
+    ["docs_batch_update",{documentId:"doc1",requests:[{insertText:{location:{index:1},text:"Hello"}}]},
+      "POST","/v1/documents/doc1:batchUpdate"],
+    ["sheets_append_values",{spreadsheetId:"sheet1",range:"Tab1!A1:B2",
+      values:[["One",1]]},"POST","/v4/spreadsheets/sheet1/values/Tab1!A1%3AB2:append"],
+    ["sheets_clear_values",{spreadsheetId:"sheet1",range:"Tab1!A1:B2"},
+      "POST","/v4/spreadsheets/sheet1/values/Tab1!A1%3AB2:clear"],
+    ["forms_batch_update",{formId:"form1",requests:[{createItem:{item:{title:"Q"},location:{index:0}}}]},
+      "POST","/v1/forms/form1:batchUpdate"],
+    ["contacts_create_contact",{givenName:"Ana",emailAddress:"ana@example.test"},
+      "POST","/v1/people:createContact"],
+    ["meet_patch_member",{spaceId:"space1",memberId:"member2",role:"COHOST"},
+      "PATCH","/v2/spaces/space1/members/member2"],
+    ["gmail_modify_message",{messageId:"msg123",addLabelIds:["STARRED"]},
+      "POST","/gmail/v1/users/me/messages/msg123/modify"],
+    ["script_create_deployment",{scriptId:"script1",versionNumber:2},
+      "POST","/v1/projects/script1/deployments"],
+    ["script_update_deployment",{scriptId:"script1",deploymentId:"deploy1",versionNumber:3},
+      "PUT","/v1/projects/script1/deployments/deploy1"],
+    ["drive_create_permission",{fileId:"file1",type:"anyone",role:"reader"},
+      "POST","/drive/v3/files/file1/permissions"],
+    ["calendar_patch_event",{calendarId:"primary",eventId:"event1",summary:"Moved"},
+      "PATCH","/calendar/v3/calendars/primary/events/event1"],
+  ];
+  for(const [name,input,verb,expectedPath] of cases){
+    const before=requests.length;
+    const proposal=await registry.execute("write_prepare_action",{
+      operation:name,input
+    },principal);
+    await f.store.decide(proposal.requestId,"approve");
+    const result=await registry.execute(name,input,principal);
+    assert(result.result&&typeof result.result==="object",name);
+    assert.equal(requests.length,before+1,name);
+    const last=requests.at(-1);
+    assert.equal(last.init.method,verb,name);
+    assert.equal(new URL(last.url).pathname,expectedPath,name);
+    assert(!last.url.includes(token));
+  }
+  const script=requests.find(req=>new URL(req.url).pathname.endsWith("/deployments"));
+  assert.equal(JSON.parse(script.init.body).manifestFileName,"appsscript");
+  const member=requests.find(req=>new URL(req.url).pathname.includes("members/member2"));
+  assert.equal(JSON.parse(member.init.body).name,"spaces/space1/members/member2");
+  const perm=requests.find(req=>new URL(req.url).pathname.includes("files/file1/permissions"));
+  assert(!new URL(perm.url).searchParams.has("sendNotificationEmail"),
+    "public anonymous Drive sharing cannot send email notifications");
+});
