@@ -23,7 +23,7 @@ export function classifyGoogleFetchFailure(error: unknown): string {
   const message = "message" in error && typeof error.message === "string"
     ? error.message : "";
   if (kind === "TimeoutError" || kind === "AbortError" ||
-      /(?:^|\\W)(?:timed out|timeout|deadline exceeded)(?:$|\\W)/i.test(message)) {
+      /(?:^|\W)(?:timed out|timeout|deadline exceeded)(?:$|\W)/i.test(message)) {
     return "GOOGLE_FETCH_TIMEOUT";
   }
   if (/unsupported cache mode|cache.*field.*not implemented/i.test(message)) {
@@ -32,7 +32,7 @@ export function classifyGoogleFetchFailure(error: unknown): string {
   if (/redirect.*(?:not implemented|unsupported|invalid)/i.test(message)) {
     return "GOOGLE_FETCH_REDIRECT_UNSUPPORTED";
   }
-  if (/outside.*request|request context|I\\/O.*(?:not allowed|context)|global scope|illegal invocation/i.test(message)) {
+  if (/outside.*request|request context|I.O.*(?:not allowed|context)|global scope|illegal invocation/i.test(message)) {
     return "GOOGLE_FETCH_CONTEXT_UNAVAILABLE";
   }
   if (kind === "TypeError") {
