@@ -77,7 +77,7 @@ export class OperationRegistry {
 
   constructor(
     private readonly sessions: SessionStore,
-    private readonly approvals?: ApprovalGate,
+    private readonly approvals?: ApprovalGate | "direct",
     private readonly now: () => number = () => Date.now()
   ) {}
 
@@ -128,15 +128,18 @@ export class OperationRegistry {
     }
 
     if (operation.risk !== "read" && operation.risk !== "prepare") {
-      if (!this.approvals) throw new OperationError("WRITE_APPROVAL_REQUIRED");
-      // Only an independently trusted approval gate may authorize a mutation.
-      // User/model inputs cannot issue, extend or confirm approval here.
-      await this.approvals.consume({
-        clientId: principal.clientId,
-        accountId: principal.accountId,
-        operation: name,
-        input
-      });
+      // The protected remote gateway may opt into direct writes only after
+      // validating BOTH mcp:write client authorization and Google OAuth scopes.
+      // Older local clients retain their independent per-action gate by default.
+      if (this.approvals !== "direct") {
+        if (!this.approvals) throw new OperationError("WRITE_APPROVAL_REQUIRED");
+        await this.approvals.consume({
+          clientId: principal.clientId,
+          accountId: principal.accountId,
+          operation: name,
+          input
+        });
+      }
     }
 
     const result = await operation.run(input, { principal, session });
