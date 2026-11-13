@@ -70,10 +70,11 @@ add("tasks_clear_completed","tasks","POST","/tasks/v1/lists/:tasklistId/clear",T
 /** Apps Script projects: full source replacements still need separate diff review. */
 add("script_create_deployment","script","POST","/v1/projects/:scriptId/deployments",ASD,"external",{
   versionNumber:z.number().int().positive(),description:description.optional()
-},x=>({versionNumber:x.versionNumber,description:x.description}));
+},x=>({versionNumber:x.versionNumber,manifestFileName:"appsscript",description:x.description}));
 add("script_update_deployment","script","PUT","/v1/projects/:scriptId/deployments/:deploymentId",ASD,"external",{
   versionNumber:z.number().int().positive(),description:description.optional()
-},x=>({deploymentConfig:{versionNumber:x.versionNumber,description:x.description,
+},x=>({deploymentConfig:{scriptId:x.scriptId,
+  versionNumber:x.versionNumber,description:x.description,
   manifestFileName:"appsscript"}}));
 add("script_delete_deployment","script","DELETE","/v1/projects/:scriptId/deployments/:deploymentId",ASD,"destructive",empty);
 
@@ -90,7 +91,7 @@ add("drive_copy_file","drive","POST","/drive/v3/files/:fileId/copy",D,"write",{
  {fields:"id,name,mimeType,webViewLink"});
 add("drive_update_file","drive","PATCH","/drive/v3/files/:fileId",D,"write",{
   name:label.optional(),description:description.optional(),
-  starred:z.boolean().optional(),trashed:z.boolean().optional(),
+  starred:z.boolean().optional(),
   addParents:itemId.optional(),removeParents:itemId.optional()
 },x=>Object.fromEntries(Object.entries(x).filter(([key,v])=>
   !["fileId","addParents","removeParents"].includes(key)&&v!==undefined)),
@@ -105,7 +106,9 @@ add("drive_create_permission","drive","POST","/drive/v3/files/:fileId/permission
   emailAddress:email.optional(),domain:z.string().max(255).optional(),
   sendNotificationEmail:z.boolean().default(false)
 },x=>({type:x.type,role:x.role,emailAddress:x.emailAddress,domain:x.domain}),
- x=>({sendNotificationEmail:x.sendNotificationEmail as boolean,fields:"id,type,role,emailAddress,domain"}));
+ x=>({sendNotificationEmail:
+    (x.type==="user"||x.type==="group")?x.sendNotificationEmail as boolean:undefined,
+    fields:"id,type,role,emailAddress,domain"}));
 add("drive_update_permission","drive","PATCH","/drive/v3/files/:fileId/permissions/:permissionId",D,"external",{
   role:z.enum(["reader","commenter","writer"])
 },x=>({role:x.role}),{fields:"id,type,role"});
@@ -155,7 +158,7 @@ add("calendar_patch_event","calendar","PATCH","/calendar/v3/calendars/:calendarI
   summary:label.optional(),description:description.optional(),
   location:z.string().max(512).optional(),
   start:when.optional(),end:when.optional(),
-  status:z.enum(["confirmed","tentative","cancelled"]).optional()
+  status:z.enum(["confirmed","tentative"]).optional()
 },x=>({summary:x.summary,description:x.description,location:x.location,
   ...(x.start?{start:{dateTime:x.start}}:{}),...(x.end?{end:{dateTime:x.end}}:{}),
   status:x.status}),{sendUpdates:"none"});
@@ -280,13 +283,13 @@ add("meet_patch_space","meet","PATCH","/v2/spaces/:spaceId",MEET_SETTINGS,"exter
  x=>({updateMask:["config.accessType","config.entryPointAccess"].filter(k=>
    x[k.split(".")[1]]!==undefined).join(",")}));
 add("meet_end_active_conference","meet","POST","/v2/spaces/:spaceId:endActiveConference",MEET_CREATED,"destructive",empty,()=>({}));
-add("meet_create_member","meet","POST","/v2/spaces/:spaceId/members",MEET_SETTINGS,"external",{
+add("meet_create_member","meet","POST","/v2/spaces/:spaceId/members",MEET_CREATED,"external",{
   email:email,role:z.enum(["COHOST","ROLE_UNSPECIFIED"]).default("ROLE_UNSPECIFIED")
 },x=>({email:x.email,role:x.role}));
-add("meet_patch_member","meet","PATCH","/v2/spaces/:spaceId/members/:memberId",MEET_SETTINGS,"external",{
+add("meet_patch_member","meet","PATCH","/v2/spaces/:spaceId/members/:memberId",MEET_CREATED,"external",{
   role:z.enum(["COHOST","ROLE_UNSPECIFIED"])
-},x=>({role:x.role}),{updateMask:"role"});
-add("meet_delete_member","meet","DELETE","/v2/spaces/:spaceId/members/:memberId",MEET_SETTINGS,"destructive",empty);
+},x=>({name:"spaces/"+x.spaceId+"/members/"+x.memberId,role:x.role}),{updateMask:"role"});
+add("meet_delete_member","meet","DELETE","/v2/spaces/:spaceId/members/:memberId",MEET_CREATED,"destructive",empty);
 
 export const WRITE_SPECS: readonly Spec[]=Object.freeze(specs);
 function encode(value:unknown):string{return encodeURIComponent(String(value));}
