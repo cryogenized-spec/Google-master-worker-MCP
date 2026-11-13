@@ -14,3 +14,7 @@ dist-setup/
 
 # Local Cloudflare account configuration (IDs, hostnames; no secrets)
 .wrangler-deploy.*.jsonc
+
+# Private per-deployment version receipts and Wrangler upload output
+.m23-release/
+.m24-release/
