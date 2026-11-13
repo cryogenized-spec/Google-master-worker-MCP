@@ -7,6 +7,7 @@ import { OperationRegistry } from "../dist/packages/core/src/index.js";
 import { registerGoogleTasks } from "../dist/packages/google-tasks/src/index.js";
 import { registerAppsScript } from "../dist/packages/google-apps-script/src/index.js";
 import { registerWorkspaceServices } from "../dist/packages/google-workspace/src/index.js";
+import { registerGoogleReadCatalogue } from "../dist/packages/google-read-catalogue/src/index.js";
 import { createMcpServer } from "../dist/packages/mcp-adapter/src/index.js";
 
 const login = {
@@ -114,6 +115,7 @@ test("remote MCP adapter exposes broad read tools but no mutations", async () =>
   registerGoogleTasks(registry);
   registerAppsScript(registry);
   registerWorkspaceServices(registry);
+  registerGoogleReadCatalogue(registry);
   const handler = createMcpHandler(() => createMcpServer(registry, async () => ({
     authenticated:true, clientId:"verified_mcp_client", accountId:"default"
   }), {readOnly:true}), {legacy:"stateless"});
@@ -138,7 +140,10 @@ test("remote MCP adapter exposes broad read tools but no mutations", async () =>
   const contents = await response.text();
   assert.equal(response.status,200,contents);
   const names = JSON.parse(contents).result.tools.map(x=>x.name);
-  assert.equal(names.length,24);
+  assert.equal(names.length,95);
+  assert(names.includes("gmail_get_message_full"));
+  assert(names.includes("calendar_query_freebusy"));
+  assert(names.includes("script_get_metrics"));
   assert(names.includes("drive_list_files"));
   assert(names.includes("gmail_list_messages"));
   assert(names.includes("calendar_list_events"));
