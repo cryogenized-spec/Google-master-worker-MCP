@@ -120,6 +120,7 @@ export function buildConfigs(raw) {
       MCP_RESOURCE_URL: urls.mcpResource,
       GOOGLE_WORKSPACE_REDIRECT_URI: urls.setupRedirect,
       GMW_WORKSPACE_READS_ENABLED:"false",
+      GMW_WRITES_ENABLED:"false",
       GMW_ALLOWED_BROWSER_ORIGINS:""
     },
     // The authorization Worker exports *default* class AuthServer.
@@ -214,7 +215,8 @@ export function verifyConfigs(configs) {
         setupOrigin !== urls.setupOrigin ||
         setup.vars.GOOGLE_WORKSPACE_REDIRECT_URI !== urls.setupRedirect ||
         mcp.vars.GOOGLE_WORKSPACE_REDIRECT_URI !== urls.setupRedirect ||
-        mcp.vars.GMW_WORKSPACE_READS_ENABLED !== "false") {
+        mcp.vars.GMW_WORKSPACE_READS_ENABLED !== "false" ||
+        mcp.vars.GMW_WRITES_ENABLED !== "false") {
       throw Error("URI mismatch");
     }
   } catch {
