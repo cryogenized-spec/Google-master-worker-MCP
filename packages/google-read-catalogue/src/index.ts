@@ -117,6 +117,9 @@ export const READ_SPECS: readonly ReadSpec[] = Object.freeze([
   s("drive","drive_list_comment_replies","/drive/v3/files/:fileId/comments/:commentId/replies",DRIVE,"replies",{
     fixed:{fields:"nextPageToken,replies(id,content,createdTime,modifiedTime,action,author(displayName,emailAddress))"}
   }),
+  s("drive","drive_get_comment_reply","/drive/v3/files/:fileId/comments/:commentId/replies/:replyId",DRIVE,undefined,{
+    fixed:{fields:"id,content,createdTime,modifiedTime,action,author(displayName,emailAddress)"}
+  }),
   s("drive","drive_list_file_revisions","/drive/v3/files/:fileId/revisions",DRIVE,"revisions",{
     fixed:{fields:"nextPageToken,revisions(id,modifiedTime,mimeType,size,keepForever,lastModifyingUser(displayName,emailAddress))"}
   }),
@@ -159,6 +162,7 @@ export const READ_SPECS: readonly ReadSpec[] = Object.freeze([
   s("calendar","calendar_get_calendar","/calendar/v3/calendars/:calendarId",CAL),
   s("calendar","calendar_list_settings","/calendar/v3/users/me/settings",CAL,"items",{pageField:"maxResults"}),
   s("calendar","calendar_get_setting","/calendar/v3/users/me/settings/:settingId",CAL),
+  s("calendar","calendar_get_calendar_list_entry","/calendar/v3/users/me/calendarList/:calendarId",CAL),
   s("calendar","calendar_list_access_rules","/calendar/v3/calendars/:calendarId/acl",CAL,"items",{pageField:"maxResults"}),
   s("calendar","calendar_get_access_rule","/calendar/v3/calendars/:calendarId/acl/:ruleId",CAL),
   s("calendar","calendar_get_colors","/calendar/v3/colors",CAL),
@@ -168,6 +172,7 @@ export const READ_SPECS: readonly ReadSpec[] = Object.freeze([
   s("gmail","gmail_get_message_full","/gmail/v1/users/me/messages/:messageId",MAIL,undefined,{
     fixed:{format:"full"}
   }),
+  s("gmail","gmail_get_attachment","/gmail/v1/users/me/messages/:messageId/attachments/:attachmentId",MAIL),
   s("gmail","gmail_list_threads","/gmail/v1/users/me/threads",MAIL,"threads",{
     pageField:"maxResults",options:{q:queryText(512),labelIds:queryText(256)}
   }),
@@ -229,12 +234,15 @@ export const READ_SPECS: readonly ReadSpec[] = Object.freeze([
   s("meet","meet_list_participants","/v2/conferenceRecords/:conferenceId/participants",MEET,"participants"),
   s("meet","meet_get_participant","/v2/conferenceRecords/:conferenceId/participants/:participantId",MEET),
   s("meet","meet_list_participant_sessions","/v2/conferenceRecords/:conferenceId/participants/:participantId/participantSessions",MEET,"participantSessions"),
+  s("meet","meet_get_participant_session","/v2/conferenceRecords/:conferenceId/participants/:participantId/participantSessions/:sessionId",MEET),
   s("meet","meet_list_recordings","/v2/conferenceRecords/:conferenceId/recordings",MEET,"recordings"),
   s("meet","meet_get_recording","/v2/conferenceRecords/:conferenceId/recordings/:recordingId",MEET),
   s("meet","meet_list_transcripts","/v2/conferenceRecords/:conferenceId/transcripts",MEET,"transcripts"),
   s("meet","meet_get_transcript","/v2/conferenceRecords/:conferenceId/transcripts/:transcriptId",MEET),
   s("meet","meet_list_transcript_entries","/v2/conferenceRecords/:conferenceId/transcripts/:transcriptId/entries",MEET,"transcriptEntries"),
   s("meet","meet_list_smart_notes","/v2/conferenceRecords/:conferenceId/smartNotes",MEET,"smartNotes"),
+  s("meet","meet_get_smart_note","/v2/conferenceRecords/:conferenceId/smartNotes/:smartNoteId",MEET),
+  s("meet","meet_get_transcript_entry","/v2/conferenceRecords/:conferenceId/transcripts/:transcriptId/entries/:entryId",MEET),
   s("meet","meet_list_members","/v2/spaces/:spaceId/members",MEET,"members"),
   s("meet","meet_get_member","/v2/spaces/:spaceId/members/:memberId",MEET)
 ]);
