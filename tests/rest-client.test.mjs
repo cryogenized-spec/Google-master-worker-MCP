@@ -5,6 +5,7 @@ import { GoogleJsonClient } from "../dist/packages/google-http/src/index.js";
 import { registerGoogleTasks } from "../dist/packages/google-tasks/src/index.js";
 import { registerAppsScript } from "../dist/packages/google-apps-script/src/index.js";
 import { registerWorkspaceServices } from "../dist/packages/google-workspace/src/index.js";
+import { registerGoogleReadCatalogue } from "../dist/packages/google-read-catalogue/src/index.js";
 import {
   handleReadOnlyApi, readOperationCatalogue, corsOrigin, corsResponse,
   restPreflight
@@ -33,6 +34,7 @@ function registryWithFakeGoogle({scopes=["https://www.googleapis.com/auth/tasks.
     "https://script.googleapis.com","/v1/",async()=>{throw Error("SCRIPT API MUST NOT BE CALLED");}
   ));
   registerWorkspaceServices(registry);
+  registerGoogleReadCatalogue(registry);
   return registry;
 }
 function post(path,body="{}",extra={}) {
@@ -48,7 +50,7 @@ test("REST capability catalogue exposes broad read-only Google Workspace operati
   );
   assert.equal(response.status,200);
   const result=await response.json();
-  assert.equal(result.operations.length,24);
+  assert.equal(result.operations.length,101);
   assert(result.operations.some(o=>o.name==="docs_get_document"));
   assert(result.operations.some(o=>o.name==="contacts_list_connections"));
   assert(result.operations.every(x=>x.risk==="read"));
@@ -159,7 +161,7 @@ test("portable TypeScript client uses the typed HTTPS API without leaking a bear
     }
   });
   const catalog=await client.capabilities();
-  assert.equal(catalog.length,24);
+  assert.equal(catalog.length,101);
   const output=await client.call("tasks_list_tasklists",{maxResults:5});
   assert.equal(output.items[0].title,"Workshop");
   assert.equal(calls,2);

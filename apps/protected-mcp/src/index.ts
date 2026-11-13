@@ -7,6 +7,7 @@ import { GoogleJsonClient } from "../../../packages/google-http/src/index.js";
 import { registerGoogleTasks } from "../../../packages/google-tasks/src/index.js";
 import { registerAppsScript } from "../../../packages/google-apps-script/src/index.js";
 import { registerWorkspaceServices } from "../../../packages/google-workspace/src/index.js";
+import { registerGoogleReadCatalogue } from "../../../packages/google-read-catalogue/src/index.js";
 import { createMcpServer } from "../../../packages/mcp-adapter/src/index.js";
 import { handleReadOnlyApi, isRestPath, restPreflight, corsOrigin, corsResponse } from "../../../packages/rest-adapter/src/index.js";
 import { createWorkspaceReadSessionStore, scopedMcpClientId, type WorkspaceVaultEnv } from "../../../packages/google-auth/src/worker-session.js";
@@ -42,6 +43,7 @@ function createReadRegistry(env: ProtectedEnv): OperationRegistry {
   registerAppsScript(registry,
     new GoogleJsonClient("https://script.googleapis.com", "/v1/"));
   registerWorkspaceServices(registry);
+  registerGoogleReadCatalogue(registry);
   return registry;
 }
 
