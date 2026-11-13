@@ -92,6 +92,101 @@ export const READ_OPERATION_NAMES = [
   "meet_get_transcript_entry"
 ] as const;
 
+export const WRITE_OPERATION_NAMES = [
+  "tasks_create_task",
+  "script_create_project",
+  "script_update_sources",
+  "script_create_version",
+  "drive_create_folder",
+  "calendar_create_event",
+  "sheets_update_values",
+  "gmail_create_draft",
+  "gmail_send_message",
+  "tasks_create_tasklist",
+  "tasks_update_tasklist",
+  "tasks_delete_tasklist",
+  "tasks_patch_task",
+  "tasks_delete_task",
+  "tasks_move_task",
+  "tasks_clear_completed",
+  "script_create_deployment",
+  "script_update_deployment",
+  "script_delete_deployment",
+  "drive_create_file",
+  "drive_copy_file",
+  "drive_update_file",
+  "drive_trash_file",
+  "drive_restore_file",
+  "drive_delete_file",
+  "drive_create_permission",
+  "drive_update_permission",
+  "drive_delete_permission",
+  "drive_create_comment",
+  "drive_update_comment",
+  "drive_delete_comment",
+  "drive_create_reply",
+  "drive_delete_reply",
+  "drive_update_reply",
+  "drive_delete_revision",
+  "docs_create_document",
+  "docs_batch_update",
+  "sheets_create_spreadsheet",
+  "sheets_append_values",
+  "sheets_clear_values",
+  "sheets_batch_update_values",
+  "sheets_batch_update",
+  "slides_create_presentation",
+  "slides_batch_update",
+  "calendar_patch_event",
+  "calendar_delete_event",
+  "calendar_move_event",
+  "calendar_create_calendar",
+  "calendar_patch_calendar",
+  "calendar_delete_calendar",
+  "calendar_patch_calendar_list",
+  "calendar_insert_calendar_list",
+  "calendar_delete_calendar_list",
+  "calendar_create_acl",
+  "calendar_update_acl",
+  "calendar_delete_acl",
+  "gmail_update_draft",
+  "gmail_delete_draft",
+  "gmail_send_draft",
+  "gmail_create_label",
+  "gmail_update_label",
+  "gmail_delete_label",
+  "gmail_modify_message",
+  "gmail_batch_modify_messages",
+  "gmail_trash_message",
+  "gmail_untrash_message",
+  "gmail_modify_thread",
+  "gmail_trash_thread",
+  "gmail_untrash_thread",
+  "gmail_set_vacation",
+  "gmail_create_filter",
+  "gmail_delete_filter",
+  "contacts_create_contact",
+  "contacts_update_contact",
+  "contacts_delete_contact",
+  "contacts_create_group",
+  "contacts_update_group",
+  "contacts_delete_group",
+  "contacts_modify_group_members",
+  "forms_create_form",
+  "forms_batch_update",
+  "forms_set_publish_settings",
+  "forms_renew_watch",
+  "forms_delete_watch",
+  "meet_create_space",
+  "meet_patch_space",
+  "meet_end_active_conference",
+  "meet_create_member",
+  "meet_patch_member",
+  "meet_delete_member"
+] as const;
+export type WriteOperationName = typeof WRITE_OPERATION_NAMES[number];
+const WRITE_ALLOWED = new Set<string>(WRITE_OPERATION_NAMES);
+
 export type ReadOperationName = typeof READ_OPERATION_NAMES[number];
 
 export interface ReadApiClientOptions {
@@ -186,7 +281,7 @@ export class GoogleMasterReadClient {
     }
   }
 
-  private async request(path:string, method:"GET"|"POST",payload?:unknown):Promise<unknown> {
+  protected async request(path:string, method:"GET"|"POST",payload?:unknown):Promise<unknown> {
     const token=await this.getAccessToken();
     if(typeof token!=="string" || token.length<8 || token.length>8192 ||
         /[\s\u0000-\u001f]/.test(token)) {
@@ -241,11 +336,15 @@ export class GoogleMasterReadClient {
     const data=await this.request("/v1/capabilities","GET") as Record<string,unknown>;
     if(!Array.isArray(data.operations) ||
        !data.operations.every(item=>item && typeof item==="object" &&
-         ALLOWED.has(item.name) && typeof item.description==="string" &&
-         item.risk==="read")) {
+         typeof item.name==="string" && typeof item.description==="string" &&
+         ["read","prepare","write","destructive","external"].includes(item.risk))) {
       throw new GoogleMasterClientError("REMOTE_RESPONSE_INVALID");
     }
-    return data.operations as ReadCapability[];
+    const reads=data.operations.filter(item=>item.risk==="read");
+    if(!reads.every(item=>ALLOWED.has(item.name))){
+      throw new GoogleMasterClientError("REMOTE_RESPONSE_INVALID");
+    }
+    return reads as ReadCapability[];
   }
 
   async call<T=unknown>(name:ReadOperationName,input:Record<string,unknown>={}):Promise<T> {
@@ -260,5 +359,52 @@ export class GoogleMasterReadClient {
       throw new GoogleMasterClientError("REMOTE_RESPONSE_INVALID");
     }
     return data.result as T;
+  }
+}
+
+/**
+ * Write-capable REST client. Every mutation is exact-action, out-of-band
+ * owner-approved; no method mints approval in this client.
+ */
+export class GoogleMasterWriteClient extends GoogleMasterReadClient {
+  async writeCapabilities():Promise<Array<{name:WriteOperationName,risk:"write"|"destructive"|"external"}>> {
+    const data=await this.request("/v1/capabilities","GET") as Record<string,unknown>;
+    if(!Array.isArray(data.operations))throw new GoogleMasterClientError("REMOTE_RESPONSE_INVALID");
+    return data.operations.filter((entry:unknown)=>{
+      if(!entry||typeof entry!=="object")return false;
+      const x=entry as Record<string,unknown>;
+      return typeof x.name==="string"&&WRITE_ALLOWED.has(x.name) &&
+        ["write","destructive","external"].includes(String(x.risk));
+    });
+  }
+
+  async prepareWrite(name:WriteOperationName,input:Record<string,unknown>):Promise<{
+    requestId:string;operation:string;risk:"write"|"destructive"|"external";
+    approvalUrl:string;expiresAt:number
+  }> {
+    if(!WRITE_ALLOWED.has(name)||!input||Array.isArray(input)||typeof input!=="object"){
+      throw new GoogleMasterClientError("INVALID_ARGUMENTS");
+    }
+    const reply=await this.request("/v1/operations/write_prepare_action","POST",
+      {operation:name,input}) as Record<string,unknown>;
+    const result=reply.result as Record<string,unknown>|undefined;
+    if(!result || typeof result.requestId!=="string" ||
+       typeof result.approvalUrl!=="string" || result.operation!==name ||
+       typeof result.expiresAt!=="number"){
+      throw new GoogleMasterClientError("REMOTE_RESPONSE_INVALID");
+    }
+    return result as {requestId:string;operation:string;
+      risk:"write"|"destructive"|"external";approvalUrl:string;expiresAt:number};
+  }
+
+  async executeApproved<T=unknown>(name:WriteOperationName,input:Record<string,unknown>):Promise<T>{
+    if(!WRITE_ALLOWED.has(name)||!input||Array.isArray(input)||typeof input!=="object"){
+      throw new GoogleMasterClientError("INVALID_ARGUMENTS");
+    }
+    const reply=await this.request("/v1/operations/"+name,"POST",input) as Record<string,unknown>;
+    if(!Object.hasOwn(reply,"result")){
+      throw new GoogleMasterClientError("REMOTE_RESPONSE_INVALID");
+    }
+    return reply.result as T;
   }
 }
