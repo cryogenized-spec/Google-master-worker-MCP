@@ -3,8 +3,7 @@
 # Keep Cloudflare triggers intact; NEVER use ordinary wrangler deploy.
 set -Eeuo pipefail
 cd "$(dirname "$0")/.."
-ACTION="$1"
-ACTION="$ACTION"
+ACTION="${1:-check}"
 wrangler() { npx --no-install wrangler "$@"; }
 MCP_CONFIG=".wrangler-deploy.mcp.jsonc"
 SETUP_CONFIG=".wrangler-deploy.setup.jsonc"
