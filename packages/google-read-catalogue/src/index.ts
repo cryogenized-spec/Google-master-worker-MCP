@@ -26,7 +26,8 @@ const listOutput = z.object({
   partial:z.boolean(),
   truncated:z.boolean(),
   nextSyncToken:z.string().nullable().optional(),
-  historyId:z.string().nullable().optional()
+  historyId:z.string().nullable().optional(),
+  newStartPageToken:z.string().nullable().optional()
 }).strict();
 const detailOutput = z.object({
   item:z.record(z.string(),z.unknown()),
@@ -355,7 +356,8 @@ export function registerGoogleReadCatalogue(
             partial:nextPageToken!==null || items.length>limit,
             truncated:meter.truncated,
             ...(result.nextSyncToken?{nextSyncToken:asString(result.nextSyncToken)}:{}),
-            ...(result.historyId?{historyId:asString(result.historyId)}:{})
+            ...(result.historyId?{historyId:asString(result.historyId)}:{}),
+            ...(result.newStartPageToken?{newStartPageToken:asString(result.newStartPageToken)}:{})
           };
         }
         return {item:safeRecord(result,meter),truncated:meter.truncated};
