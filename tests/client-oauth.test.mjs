@@ -140,7 +140,7 @@ test("remote MCP adapter exposes broad read tools but no mutations", async () =>
   const contents = await response.text();
   assert.equal(response.status,200,contents);
   const names = JSON.parse(contents).result.tools.map(x=>x.name);
-  assert.equal(names.length,95);
+  assert.equal(names.length,101);
   assert(names.includes("gmail_get_message_full"));
   assert(names.includes("calendar_query_freebusy"));
   assert(names.includes("script_get_metrics"));
