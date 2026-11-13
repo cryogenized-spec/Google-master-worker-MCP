@@ -107,6 +107,99 @@ class GoogleMasterReadClient(
   "meet_get_transcript_entry"
     )
 
+    private val writeNames = setOf(
+        "tasks_create_task",
+        "script_create_project",
+        "script_update_sources",
+        "script_create_version",
+        "drive_create_folder",
+        "calendar_create_event",
+        "sheets_update_values",
+        "gmail_create_draft",
+        "gmail_send_message",
+        "tasks_create_tasklist",
+        "tasks_update_tasklist",
+        "tasks_delete_tasklist",
+        "tasks_patch_task",
+        "tasks_delete_task",
+        "tasks_move_task",
+        "tasks_clear_completed",
+        "script_create_deployment",
+        "script_update_deployment",
+        "script_delete_deployment",
+        "drive_create_file",
+        "drive_copy_file",
+        "drive_update_file",
+        "drive_trash_file",
+        "drive_restore_file",
+        "drive_delete_file",
+        "drive_create_permission",
+        "drive_update_permission",
+        "drive_delete_permission",
+        "drive_create_comment",
+        "drive_update_comment",
+        "drive_delete_comment",
+        "drive_create_reply",
+        "drive_delete_reply",
+        "drive_update_reply",
+        "drive_delete_revision",
+        "docs_create_document",
+        "docs_batch_update",
+        "sheets_create_spreadsheet",
+        "sheets_append_values",
+        "sheets_clear_values",
+        "sheets_batch_update_values",
+        "sheets_batch_update",
+        "slides_create_presentation",
+        "slides_batch_update",
+        "calendar_patch_event",
+        "calendar_delete_event",
+        "calendar_move_event",
+        "calendar_create_calendar",
+        "calendar_patch_calendar",
+        "calendar_delete_calendar",
+        "calendar_patch_calendar_list",
+        "calendar_insert_calendar_list",
+        "calendar_delete_calendar_list",
+        "calendar_create_acl",
+        "calendar_update_acl",
+        "calendar_delete_acl",
+        "gmail_update_draft",
+        "gmail_delete_draft",
+        "gmail_send_draft",
+        "gmail_create_label",
+        "gmail_update_label",
+        "gmail_delete_label",
+        "gmail_modify_message",
+        "gmail_batch_modify_messages",
+        "gmail_trash_message",
+        "gmail_untrash_message",
+        "gmail_modify_thread",
+        "gmail_trash_thread",
+        "gmail_untrash_thread",
+        "gmail_set_vacation",
+        "gmail_create_filter",
+        "gmail_delete_filter",
+        "contacts_create_contact",
+        "contacts_update_contact",
+        "contacts_delete_contact",
+        "contacts_create_group",
+        "contacts_update_group",
+        "contacts_delete_group",
+        "contacts_modify_group_members",
+        "forms_create_form",
+        "forms_batch_update",
+        "forms_set_publish_settings",
+        "forms_renew_watch",
+        "forms_delete_watch",
+        "meet_create_space",
+        "meet_patch_space",
+        "meet_end_active_conference",
+        "meet_create_member",
+        "meet_patch_member",
+        "meet_delete_member"
+    )
+
     init {
         val uri = URI(resourceUrl)
         require(uri.scheme == "https" && uri.rawPath == "/mcp" &&
@@ -124,6 +217,21 @@ class GoogleMasterReadClient(
         require(name in readNames) { "Unsupported or non-read operation" }
         val envelope = request("POST", "/v1/operations/$name", arguments)
         if (!envelope.has("result")) throw ApiException(0, "INVALID_RESPONSE")
+        return envelope.optJSONObject("result") ?: throw ApiException(0, "INVALID_RESPONSE")
+    }
+
+    /** Preparing an operation NEVER modifies Google data; owner approval is separate. */
+    fun prepareWrite(name: String, input: JSONObject): JSONObject {
+        require(name in writeNames) { "Unsupported or non-write operation" }
+        val envelope = request("POST", "/v1/operations/write_prepare_action",
+            JSONObject().put("operation", name).put("input", input))
+        return envelope.optJSONObject("result") ?: throw ApiException(0, "INVALID_RESPONSE")
+    }
+
+    /** Works only after the owner approved the same exact action once. */
+    fun executeApproved(name: String, input: JSONObject): JSONObject {
+        require(name in writeNames) { "Unsupported or non-write operation" }
+        val envelope = request("POST", "/v1/operations/$name", input)
         return envelope.optJSONObject("result") ?: throw ApiException(0, "INVALID_RESPONSE")
     }
 
