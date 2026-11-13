@@ -26,7 +26,7 @@ const cleanJSON=z.record(z.string(),z.unknown()).refine(value=>{
   try{return JSON.stringify(value).length<=23000;}catch{return false;}
 },"JSON object is too large");
 const batch=z.array(cleanJSON).min(1).max(30);
-const pathId=(template:string)=>[...template.matchAll(/:([a-z][A-Za-z0-9]*)/g)].map(x=>x[1]);
+const pathId=(template:string)=>[...template.matchAll(/\/:([a-z][A-Za-z0-9]*)/g)].map(x=>x[1]);
 const specs:Spec[]=[];
 function add(name:string,service:Service,method:Method,path:string,scope:string[],
   risk:Spec["risk"],shape:Spec["shape"],payload?:Payload,
@@ -291,10 +291,10 @@ add("meet_delete_member","meet","DELETE","/v2/spaces/:spaceId/members/:memberId"
 export const WRITE_SPECS: readonly Spec[]=Object.freeze(specs);
 function encode(value:unknown):string{return encodeURIComponent(String(value));}
 function route(template:string, input:Record<string,unknown>):string {
-  return template.replace(/:([a-z][A-Za-z0-9]*)/g,(_full,key:string)=>{
+  return template.replace(/(\/):([a-z][A-Za-z0-9]*)/g,(_full,slash:string,key:string)=>{
     const value=input[key];
     if(typeof value!=="string")throw new OperationError("INVALID_ARGUMENTS");
-    return encode(value);
+    return slash+encode(value);
   });
 }
 function clientMap(overrides:Partial<Record<Service,GoogleJsonClient>>) {
