@@ -220,16 +220,8 @@ class GoogleMasterReadClient(
         return envelope.optJSONObject("result") ?: throw ApiException(0, "INVALID_RESPONSE")
     }
 
-    /** Preparing an operation NEVER modifies Google data; owner approval is separate. */
-    fun prepareWrite(name: String, input: JSONObject): JSONObject {
-        require(name in writeNames) { "Unsupported or non-write operation" }
-        val envelope = request("POST", "/v1/operations/write_prepare_action",
-            JSONObject().put("operation", name).put("input", input))
-        return envelope.optJSONObject("result") ?: throw ApiException(0, "INVALID_RESPONSE")
-    }
-
-    /** Works only after the owner approved the same exact action once. */
-    fun executeApproved(name: String, input: JSONObject): JSONObject {
+    /** Executes a scoped Google write directly after one-time OAuth connection approval. */
+    fun callWrite(name: String, input: JSONObject): JSONObject {
         require(name in writeNames) { "Unsupported or non-write operation" }
         val envelope = request("POST", "/v1/operations/$name", input)
         return envelope.optJSONObject("result") ?: throw ApiException(0, "INVALID_RESPONSE")
