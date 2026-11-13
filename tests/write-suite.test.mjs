@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
+import {handleReadOnlyApi} from "../dist/packages/rest-adapter/src/index.js";
+import {GoogleMasterWriteClient} from "../dist/packages/client-sdk/src/index.js";
 import {DatabaseSync} from "node:sqlite";
 import {OperationRegistry,OperationError} from "../dist/packages/core/src/index.js";
 import {GoogleJsonClient} from "../dist/packages/google-http/src/index.js";
@@ -233,4 +235,33 @@ test("Representative Google mutation routes use correct verbs, colon action suff
   const perm=requests.find(req=>new URL(req.url).pathname.includes("files/file1/permissions"));
   assert(!new URL(perm.url).searchParams.has("sendNotificationEmail"),
     "public anonymous Drive sharing cannot send email notifications");
+});
+
+
+test("Portable TypeScript write client must prepare, await owner decision and execute exact input",async t=>{
+  const f=fixture();t.after(f.close);
+  const {registry,requests}=mock({},f.store);
+  registerWriteApprovalPreparation(registry,f.store,origin);
+  const client=new GoogleMasterWriteClient({
+    resourceUrl:"https://mcp.example.test/mcp",
+    getAccessToken:async()=> "FAKE_CLIENT_OAUTH_TOKEN_123456",
+    transport:async(url,init)=>{
+      assert.equal(init.headers.Authorization,"Bearer FAKE_CLIENT_OAUTH_TOKEN_123456");
+      return handleReadOnlyApi(new Request(url,init),registry,principal,{writesEnabled:true});
+    }
+  });
+  const writes=await client.writeCapabilities();
+  assert.equal(writes.length,81);
+  assert(writes.some(x=>x.name==="drive_copy_file"));
+  const input={fileId:"f1",name:"Copy"};
+  const pending=await client.prepareWrite("drive_copy_file",input);
+  assert.equal(pending.operation,"drive_copy_file");
+  await assert.rejects(client.executeApproved("drive_copy_file",input),
+    {code:"WRITE_APPROVAL_REQUIRED",status:403});
+  await f.store.decide(pending.requestId,"approve");
+  const result=await client.executeApproved("drive_copy_file",input);
+  assert.equal(result.result.id,"created-id");
+  assert.equal(requests.length,1);
+  await assert.rejects(client.executeApproved("drive_copy_file",input),
+    {code:"WRITE_APPROVAL_REQUIRED",status:403});
 });
