@@ -55,8 +55,8 @@ function argumentsFor(spec){
   return args;
 }
 
-test("M22 defines 70 fixed list/detail routes plus one bounded read-only freeBusy query",()=>{
-  assert.equal(READ_SPECS.length,70);
+test("M22 defines 76 fixed list/detail routes plus one bounded read-only freeBusy query",()=>{
+  assert.equal(READ_SPECS.length,76);
   const names=READ_SPECS.map(s=>s.name);
   assert.equal(new Set(names).size,names.length);
   assert(!names.includes("google_request"));
@@ -67,11 +67,11 @@ test("M22 defines 70 fixed list/detail routes plus one bounded read-only freeBus
   assert(READ_SPECS.every(spec=>spec.scopes.some(scope=>granted.has(scope))),
     "every read path must be permitted by at least one existing personal grant");
   const {registry}=mockCatalogue(()=>({}));
-  assert.equal(registry.catalogue().length,71);
+  assert.equal(registry.catalogue().length,77);
   assert(registry.catalogue().every(op=>op.risk==="read"));
 });
 
-test("All 70 registered Google read descriptors execute in bounded mock API paths",async()=>{
+test("All 76 registered Google read descriptors execute in bounded mock API paths",async()=>{
   let current=null;
   const {registry,requests}=mockCatalogue((service,url)=>{
     assert.equal(service,current.service);
@@ -97,7 +97,7 @@ test("All 70 registered Google read descriptors execute in bounded mock API path
     }
     assert(!JSON.stringify(result).includes(token));
   }
-  assert.equal(requests.length,70);
+  assert.equal(requests.length,76);
 });
 
 test("Calendar freeBusy issues a fixed read-only POST with bounded typed inputs",async()=>{
