@@ -19,7 +19,8 @@ interface AuthEnv {
 interface UpstreamState { verifier: string; }
 interface AuthProps { userId: "owner"; accountId: "default"; }
 
-const SCOPES = ["mcp:read", "offline_access"] as const;
+// Client OAuth grants read and write once at connection; never per action.
+const SCOPES = ["mcp:read", "mcp:write", "offline_access"] as const;
 
 function validRoot(value: string): boolean {
   try {
