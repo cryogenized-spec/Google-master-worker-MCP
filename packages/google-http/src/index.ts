@@ -45,7 +45,10 @@ export class GoogleJsonClient {
   constructor(
     private readonly origin: string,
     private readonly requiredPathPrefix: string,
-    private readonly request: typeof fetch = fetch,
+    // Resolve global fetch at call time so Workers keeps the current request context.
+    // Call the stored transport as a plain function, not as this.request(...):
+    // some runtimes reject an unexpected method receiver as illegal invocation.
+    private readonly request: typeof fetch = (input, init) => fetch(input, init),
     private readonly maxBytes = 256 * 1024
   ) {
     const fixed = new URL(origin);
@@ -72,7 +75,9 @@ export class GoogleJsonClient {
 
     let response: Response;
     try {
-      response = await this.request(url.href, {
+      // Do not pass GoogleJsonClient as the transport function's 'this'.
+      const request = this.request;
+      response = await request(url.href, {
         method, redirect: "manual", credentials: "omit", cache: "no-store",
         signal: AbortSignal.timeout(15000),
         headers: {
