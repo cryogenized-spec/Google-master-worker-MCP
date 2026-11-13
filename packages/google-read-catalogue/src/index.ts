@@ -147,9 +147,7 @@ export const READ_SPECS: readonly ReadSpec[] = Object.freeze([
   }),
   s("sheets","sheets_get_developer_metadata","/v4/spreadsheets/:spreadsheetId/developerMetadata/:metadataId",SHEETS),
   s("slides","slides_get_page","/v1/presentations/:presentationId/pages/:pageObjectId",SLIDES),
-  s("slides","slides_get_page_thumbnail","/v1/presentations/:presentationId/pages/:pageObjectId/thumbnail",SLIDES,{
-    /* no listKey; explicit page thumbnail metadata */
-  }),
+  s("slides","slides_get_page_thumbnail","/v1/presentations/:presentationId/pages/:pageObjectId/thumbnail",SLIDES),
 
   // Calendar: event details, instances, settings, access controls and colors.
   s("calendar","calendar_get_event","/calendar/v3/calendars/:calendarId/events/:eventId",CAL),
