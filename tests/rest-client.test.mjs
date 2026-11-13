@@ -50,7 +50,7 @@ test("REST capability catalogue exposes broad read-only Google Workspace operati
   );
   assert.equal(response.status,200);
   const result=await response.json();
-  assert.equal(result.operations.length,95);
+  assert.equal(result.operations.length,101);
   assert(result.operations.some(o=>o.name==="docs_get_document"));
   assert(result.operations.some(o=>o.name==="contacts_list_connections"));
   assert(result.operations.every(x=>x.risk==="read"));
@@ -161,7 +161,7 @@ test("portable TypeScript client uses the typed HTTPS API without leaking a bear
     }
   });
   const catalog=await client.capabilities();
-  assert.equal(catalog.length,95);
+  assert.equal(catalog.length,101);
   const output=await client.call("tasks_list_tasklists",{maxResults:5});
   assert.equal(output.items[0].title,"Workshop");
   assert.equal(calls,2);
