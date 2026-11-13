@@ -8,6 +8,8 @@ import { registerGoogleTasks } from "../../../packages/google-tasks/src/index.js
 import { registerAppsScript } from "../../../packages/google-apps-script/src/index.js";
 import { registerWorkspaceServices } from "../../../packages/google-workspace/src/index.js";
 import { registerGoogleReadCatalogue } from "../../../packages/google-read-catalogue/src/index.js";
+import { registerGoogleWriteCatalogue } from "../../../packages/google-write-catalogue/src/index.js";
+import { D1WriteApprovals, registerWriteApprovalPreparation } from "../../../packages/google-approvals/src/index.js";
 import { createMcpServer } from "../../../packages/mcp-adapter/src/index.js";
 import { handleReadOnlyApi, isRestPath, restPreflight, corsOrigin, corsResponse } from "../../../packages/rest-adapter/src/index.js";
 import { createWorkspaceReadSessionStore, scopedMcpClientId, type WorkspaceVaultEnv } from "../../../packages/google-auth/src/worker-session.js";
@@ -18,6 +20,7 @@ export interface ProtectedEnv extends WorkspaceVaultEnv {
   AUTH_ISSUER: string;
   MCP_RESOURCE_URL: string;
   GMW_ALLOWED_BROWSER_ORIGINS?: string;
+  GMW_WRITES_ENABLED?: string;
 }
 
 function configured(env: ProtectedEnv, request: Request): boolean {
@@ -37,13 +40,22 @@ function configured(env: ProtectedEnv, request: Request): boolean {
 function createReadRegistry(env: ProtectedEnv): OperationRegistry {
   // A client token cannot activate Google reads. The D1 session remains
   // independently gated by GMW_WORKSPACE_READS_ENABLED and Google consent.
-  const registry = new OperationRegistry(createWorkspaceReadSessionStore(env));
+  const writesEnabled=env.GMW_WRITES_ENABLED==="true";
+  const approval=writesEnabled
+    ? new D1WriteApprovals(env.DB!,env.GMW_TOKEN_ENC_KEY||"")
+    : undefined;
+  const registry = new OperationRegistry(createWorkspaceReadSessionStore(env),approval);
   registerGoogleTasks(registry,
     new GoogleJsonClient("https://tasks.googleapis.com", "/tasks/v1/"));
   registerAppsScript(registry,
     new GoogleJsonClient("https://script.googleapis.com", "/v1/"));
   registerWorkspaceServices(registry);
   registerGoogleReadCatalogue(registry);
+  if(writesEnabled && approval){
+    registerGoogleWriteCatalogue(registry);
+    registerWriteApprovalPreparation(registry,approval,
+      new URL(env.GOOGLE_WORKSPACE_REDIRECT_URI||"").origin);
+  }
   return registry;
 }
 
@@ -116,7 +128,8 @@ async function protectedReadApi(
       }
     });
   }
-  return handleReadOnlyApi(request, registry, principal);
+  return handleReadOnlyApi(request, registry, principal,
+    {writesEnabled:env.GMW_WRITES_ENABLED==="true"});
 }
 
 /** Read-only OAuth resource. Google access requires a separate encrypted vault connection and explicit opt-in. */
@@ -159,7 +172,8 @@ export function createProtectedResource(env: ProtectedEnv) {
           });
         }
         const handler = createMcpHandler(
-          () => createMcpServer(registry, async () => principal, {readOnly: true}),
+          () => createMcpServer(registry, async () => principal,
+            {readOnly: _env.GMW_WRITES_ENABLED!=="true"}),
           {legacy: "stateless"}
         );
         return handler.fetch(request);
