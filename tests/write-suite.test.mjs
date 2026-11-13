@@ -79,7 +79,7 @@ test("M23 installs 81 distinct named Google writes without a generic arbitrary U
 
 test("Without independent owner approval, NO provider mutation executes",async()=>{
   const {registry,requests}=mock();
-  await assert.rejects(registry.execute("gmail_delete_message",{messageId:"msg123"},principal),
+  await assert.rejects(registry.execute("gmail_trash_message",{messageId:"msg123"},principal),
     /WRITE_APPROVAL_REQUIRED/);
   await assert.rejects(registry.execute("drive_create_permission",{
     fileId:"f1",type:"anyone",role:"writer"
@@ -129,10 +129,10 @@ test("Owner rejection blocks permanently and never triggers Google I/O",async t=
   registerWriteApprovalPreparation(registry,f.store,origin);
   const input={messageId:"m1"};
   const r=await registry.execute("write_prepare_action",{
-    operation:"gmail_delete_message",input
+    operation:"gmail_trash_message",input
   },principal);
   await f.store.decide(r.requestId,"reject");
-  await assert.rejects(registry.execute("gmail_delete_message",input,principal),
+  await assert.rejects(registry.execute("gmail_trash_message",input,principal),
     /WRITE_APPROVAL_REQUIRED/);
   await assert.rejects(f.store.decide(r.requestId,"approve"),
     /APPROVAL_EXPIRED_OR_ALREADY_DECIDED/);
@@ -147,10 +147,10 @@ test("Approval request rejects invalid target/fields, scopes or forged direct gr
     operation:"fake_arbitrary_http",input:{url:"https://example.test"}
   },principal),/UNKNOWN_WRITE_OPERATION/);
   await assert.rejects(registry.execute("write_prepare_action",{
-    operation:"gmail_delete_message",input:{messageId:"a",approved:true}
+    operation:"gmail_trash_message",input:{messageId:"a",approved:true}
   },principal),/INVALID_ARGUMENTS/);
   await assert.rejects(registry.execute("write_prepare_action",{
-    operation:"gmail_delete_message",input:{messageId:"../etc"}
+    operation:"gmail_trash_message",input:{messageId:"../etc"}
   },principal),/INVALID_ARGUMENTS/);
   assert.equal(requests.length,0);
 });
@@ -159,12 +159,12 @@ test("Owner-approved destructive DELETE accepts Google 204 without provider JSON
   const f=fixture();t.after(f.close);
   const {registry,requests}=mock({},f.store);
   registerWriteApprovalPreparation(registry,f.store,origin);
-  const input={messageId:"m1"};
+  const input={fileId:"file_to_delete"};
   const requested=await registry.execute("write_prepare_action",{
-    operation:"gmail_delete_message",input
+    operation:"drive_delete_file",input
   },principal);
   await f.store.decide(requested.requestId,"approve");
-  const result=await registry.execute("gmail_delete_message",input,principal);
+  const result=await registry.execute("drive_delete_file",input,principal);
   assert.deepEqual(result.result,{});
   assert.equal(requests.length,1);
   assert.equal(requests[0].init.method,"DELETE");
