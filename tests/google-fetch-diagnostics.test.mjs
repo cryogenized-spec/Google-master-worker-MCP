@@ -63,3 +63,27 @@ test("non-2xx Google HTTP responses are not mistaken for network exceptions",asy
     path:"/tasks/v1/users/@me/lists",accessToken:token
   }),{code:"GOOGLE_FORBIDDEN"});
 });
+
+test("Google API transport must not bind an arbitrary client object as fetch receiver",async()=>{
+  let called=0;
+  async function contextSensitiveTransport(url, init) {
+    // Cloudflare's runtime fetch is a Web API function, not a method on
+    // GoogleJsonClient. This was not covered by the existing arrow mocks.
+    assert.equal(this,undefined,"fetch must be invoked without client receiver");
+    called++;
+    assert.equal(url,"https://tasks.googleapis.com/tasks/v1/users/@me/lists");
+    assert.equal(init.redirect,"manual");
+    assert.equal(init.cache,"no-store");
+    assert.equal(init.credentials,"omit");
+    assert.equal(init.headers.Authorization,"Bearer "+token);
+    return Response.json({items:[{id:"test",title:"Works"}]});
+  }
+  const client=new GoogleJsonClient(
+    "https://tasks.googleapis.com","/tasks/v1/",contextSensitiveTransport
+  );
+  const result=await client.json({
+    path:"/tasks/v1/users/@me/lists",accessToken:token
+  });
+  assert.equal(called,1);
+  assert.equal(result.items[0].title,"Works");
+});
