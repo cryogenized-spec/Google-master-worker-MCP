@@ -33,6 +33,23 @@ const server=createTestHarness({
     },
     {
       config:{
+        name:"gmw-write-test",
+        main:"apps/protected-mcp/src/index.ts",
+        compatibility_date:"2026-11-10",
+        compatibility_flags:["nodejs_compat"],
+        workers_dev:false,
+        vars:{
+          AUTH_ISSUER:authHost,
+          MCP_RESOURCE_URL:resource,
+          GMW_WORKSPACE_READS_ENABLED:"false",
+          GMW_WRITES_ENABLED:"true",
+          GMW_ALLOWED_BROWSER_ORIGINS:explicit
+        },
+        services:[{binding:"AUTH_SERVER",service:"gmw-test-auth"}]
+      }
+    },
+    {
+      config:{
         name:"gmw-test-auth",
         main:"tests/fixtures/oauth-test-auth-worker.ts",
         compatibility_date:"2026-11-10",
@@ -42,10 +59,11 @@ const server=createTestHarness({
     }
   ]
 });
-let protectedWorker;
+let protectedWorker, writeWorker;
 before(async()=>{
   await server.listen();
   protectedWorker=server.getWorker("google-master-mcp");
+  writeWorker=server.getWorker("gmw-write-test");
 },{timeout:60000});
 after(async()=>{await server.close();},{timeout:60000});
 
@@ -166,4 +184,35 @@ test("insufficient client scopes produce a 403 challenge with requested scope",a
   assert.equal(response.status,403);
   assert.match(response.headers.get("WWW-Authenticate")||"",/insufficient_scope/);
   assert.match(response.headers.get("WWW-Authenticate")||"",/mcp:read/);
+});
+
+
+test("write-enabled MCP requires one-time mcp:write OAuth grant, not mere mcp:read",async()=>{
+  const readToken=await writeWorker.fetch(origin+"/v1/capabilities",{
+    headers:{Authorization:"Bearer test-owner-read-token"}
+  });
+  assert.equal(readToken.status,403);
+  assert.match(readToken.headers.get("WWW-Authenticate")||"",/mcp:write/);
+  const permitted=await writeWorker.fetch(origin+"/v1/capabilities",{
+    headers:{Authorization:"Bearer test-owner-write-token"}
+  });
+  const result=await permitted.json();
+  assert.equal(permitted.status,200,JSON.stringify(result));
+  assert.equal(result.operations.length,191);
+  assert(result.operations.some(x=>x.name==="drive_copy_file"&&x.risk==="write"));
+  assert(result.operations.some(x=>x.name==="gmail_send_message"&&x.risk==="external"));
+  assert(!result.operations.some(x=>x.name==="write_prepare_action"));
+});
+
+test("write-scoped owner token reaches direct write path without approval page",async()=>{
+  const resp=await writeWorker.fetch(origin+"/v1/operations/drive_copy_file",{
+    method:"POST",headers:{
+      Authorization:"Bearer test-owner-write-token",
+      "Content-Type":"application/json"
+    },body:JSON.stringify({fileId:"fake-file",name:"Synthetic copy"})
+  });
+  // No Google vault in the offline harness; the call is validated and
+  // reaches the Google-session boundary rather than a write-approval gate.
+  assert.equal(resp.status,503);
+  assert.deepEqual(await resp.json(),{error:"GOOGLE_SESSION_NOT_CONFIGURED"});
 });

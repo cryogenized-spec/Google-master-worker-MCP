@@ -1,5 +1,4 @@
 import { OperationError } from "../../../packages/core/src/index.js";
-import { D1WriteApprovals } from "../../../packages/google-approvals/src/index.js";
 import { GoogleOAuthBroker, type GoogleOAuthConfig } from "../../../packages/google-auth/src/index.js";
 import { WORKSPACE_SCOPES, PERSONAL_WORKSPACE_SCOPES } from "../../../packages/google-auth/src/scopes.js";
 import { OwnerBrowserStore, type OwnerSession } from "../../../packages/google-auth/src/browser-store.js";
@@ -44,7 +43,6 @@ interface SetupServices {
   readonly browser: OwnerBrowserStore;
   readonly vault: GoogleOAuthStore;
   readonly broker: GoogleOAuthBroker;
-  readonly approvals: D1WriteApprovals;
   readonly key: CryptoKey;
   readonly login: {
     clientId: string; clientSecret: string;
@@ -177,8 +175,7 @@ async function services(
     return {
       origin, db, vault, key, login,
       browser: new OwnerBrowserStore(db),
-      broker: new GoogleOAuthBroker(vault, workspace, googleFetch),
-      approvals: new D1WriteApprovals(db,env.GMW_TOKEN_ENC_KEY)
+      broker: new GoogleOAuthBroker(vault, workspace, googleFetch)
     };
   } catch { throw new OperationError("SETUP_NOT_CONFIGURED"); }
 }
@@ -243,8 +240,7 @@ async function finishLogin(
     cookie(CSRF_COOKIE,csrf,3600)
   ]);
 }
-function documentPage(connected:boolean, csrf:string, status:string, grantedCount=0,
-  approvalPanel=""): string {
+function documentPage(connected:boolean, csrf:string, status:string, grantedCount=0): string {
   const statusText = status === "connected" ? "Workspace connected successfully." :
     status === "cancelled" ? "Authorization cancelled." :
     status === "disconnected" ? "Stored connection disconnected and revoked." : "";
@@ -277,62 +273,11 @@ function documentPage(connected:boolean, csrf:string, status:string, grantedCoun
     '<main><h1>Google Master Worker · Private setup</h1>'+
     '<p>Operator identity verified. This page never displays OAuth tokens.</p>'+
     (statusText ? '<p role="status">'+htmlEscape(statusText)+'</p>' : '')+
-    connect+approvalPanel+
+    connect+
     '<p>Cloudflare operation access is controlled separately from Google OAuth.</p>'+
     '<form method="post" action="/setup/logout"><input type="hidden" name="csrf" value="'+htmlEscape(csrf)+'">'+
     '<button type="submit">Log out of setup</button></form></main></body></html>';
 }
-/** Authenticated private browser page is the ONLY approval issuer.
- * Proposals alone never authorize any Google mutation. */
-async function approvalPanel(s:SetupServices,id:string,csrf:string):Promise<string>{
-  const preview=await s.approvals.preview(id);
-  if(preview.status!=="pending"){
-    return '<section><h2>Write approval</h2><p>Request already decided: '+
-      htmlEscape(preview.status)+'</p></section>';
-  }
-  const details=JSON.stringify(preview.input,null,2);
-  let mime="";
-  const raw=preview.input.rawBase64Url;
-  if(typeof raw==="string"&&raw.length<65000){
-    try{
-      const b64=raw.replace(/-/g,"+").replace(/_/g,"/");
-      const plain=atob(b64);
-      const bytes=Uint8Array.from(plain,ch=>ch.charCodeAt(0));
-      const decoded=new TextDecoder("utf-8",{fatal:true}).decode(bytes);
-      mime='<h3>Decoded Gmail message for human review</h3><pre style="white-space:pre-wrap">'+
-        htmlEscape(decoded.slice(0,30000))+'</pre>';
-    }catch{
-      mime='<p>Message MIME could not be decoded; reject unless the content is understood.</p>';
-    }
-  }
-  const hidden='<input type="hidden" name="csrf" value="'+htmlEscape(csrf)+'">'+
-    '<input type="hidden" name="approvalId" value="'+htmlEscape(preview.id)+'">';
-  return '<section><h2>Review proposed Google mutation</h2>'+
-    '<p><strong>Operation:</strong> '+htmlEscape(preview.operation)+
-    ' · <strong>Risk:</strong> '+htmlEscape(preview.risk)+
-    ' · <strong>Client:</strong> '+htmlEscape(preview.clientId)+
-    ' · <strong>Expires:</strong> '+htmlEscape(new Date(preview.expiresAt).toISOString())+'</p>'+
-    '<p>Inspect every target, recipient, permission and content field. This grants exactly one execution of these parameters. No blanket authorization.</p>'+
-    '<pre style="white-space:pre-wrap;overflow-wrap:anywhere;max-height:55vh;overflow:auto">'+
-    htmlEscape(details)+'</pre>'+mime+
-    '<form method="post" action="/setup/approvals/decide">'+hidden+
-    '<button type="submit" name="decision" value="approve">Approve once</button> '+
-    '<button type="submit" name="decision" value="reject">Reject</button></form></section>';
-}
-async function decideWriteApproval(req:Request,s:SetupServices,now:number):Promise<Response>{
-  const {form}=await formAuthenticated(req,s,now);
-  if([...form.keys()].some(key=>!["csrf","approvalId","decision"].includes(key))){
-    throw new OperationError("SETUP_FORM_INVALID");
-  }
-  const id=one(form,"approvalId");
-  const decision=one(form,"decision");
-  if(!id||(decision!=="approve"&&decision!=="reject")){
-    throw new OperationError("SETUP_FORM_INVALID");
-  }
-  await s.approvals.decide(id,decision);
-  return redirect(s.origin+"/setup?status=approval-"+decision);
-}
-
 async function formAuthenticated(
   req: Request, s: SetupServices, now: number
 ): Promise<{ctx:OwnerContext;form:URLSearchParams}> {
@@ -409,8 +354,7 @@ export function createSetupApp(
         // reading a browser session or calling Google. Deny on limiter errors.
         const guardedPaths = new Set([
           "/setup/login", "/google/callback", "/setup/google/connect",
-          "/oauth/google/callback", "/setup/disconnect", "/setup/logout",
-          "/setup/approvals/decide"
+          "/oauth/google/callback", "/setup/disconnect", "/setup/logout"
         ]);
         if (guardedPaths.has(pathname)) {
           let allowed = false;
@@ -436,9 +380,7 @@ export function createSetupApp(
           const scopeList=record ? JSON.parse(record.scopes_json) as unknown : [];
           const grantedCount=Array.isArray(scopeList) ? scopeList.length : 0;
           const status=new URL(request.url).searchParams.get("status") || "";
-          const approvalId=new URL(request.url).searchParams.get("approval");
-          const panel=approvalId?await approvalPanel(s,approvalId,ctx.csrfRaw):"";
-          return reply(documentPage(connected,ctx.csrfRaw,status,grantedCount,panel),200,
+          return reply(documentPage(connected,ctx.csrfRaw,status,grantedCount),200,
             new Headers({"Referrer-Policy":"same-origin"}));
         }
         if (pathname==="/setup/google/connect" && request.method==="POST") {
@@ -446,9 +388,6 @@ export function createSetupApp(
         }
         if (pathname==="/oauth/google/callback" && request.method==="GET") {
           return await finishLink(request,s,now);
-        }
-        if (pathname==="/setup/approvals/decide" && request.method==="POST") {
-          return await decideWriteApproval(request,s,now);
         }
         if (pathname==="/setup/disconnect" && request.method==="POST") {
           await formAuthenticated(request,s,now);

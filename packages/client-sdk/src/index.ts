@@ -363,8 +363,8 @@ export class GoogleMasterReadClient {
 }
 
 /**
- * Write-capable REST client. Every mutation is exact-action, out-of-band
- * owner-approved; no method mints approval in this client.
+ * Write-capable REST client: one authenticated call executes the mutation.
+ * Connection authorization requires mcp:write; Google scope checks remain server-side.
  */
 export class GoogleMasterWriteClient extends GoogleMasterReadClient {
   async writeCapabilities():Promise<Array<{name:WriteOperationName,risk:"write"|"destructive"|"external"}>> {
@@ -378,26 +378,7 @@ export class GoogleMasterWriteClient extends GoogleMasterReadClient {
     });
   }
 
-  async prepareWrite(name:WriteOperationName,input:Record<string,unknown>):Promise<{
-    requestId:string;operation:string;risk:"write"|"destructive"|"external";
-    approvalUrl:string;expiresAt:number
-  }> {
-    if(!WRITE_ALLOWED.has(name)||!input||Array.isArray(input)||typeof input!=="object"){
-      throw new GoogleMasterClientError("INVALID_ARGUMENTS");
-    }
-    const reply=await this.request("/v1/operations/write_prepare_action","POST",
-      {operation:name,input}) as Record<string,unknown>;
-    const result=reply.result as Record<string,unknown>|undefined;
-    if(!result || typeof result.requestId!=="string" ||
-       typeof result.approvalUrl!=="string" || result.operation!==name ||
-       typeof result.expiresAt!=="number"){
-      throw new GoogleMasterClientError("REMOTE_RESPONSE_INVALID");
-    }
-    return result as {requestId:string;operation:string;
-      risk:"write"|"destructive"|"external";approvalUrl:string;expiresAt:number};
-  }
-
-  async executeApproved<T=unknown>(name:WriteOperationName,input:Record<string,unknown>):Promise<T>{
+  async callWrite<T=unknown>(name:WriteOperationName,input:Record<string,unknown>):Promise<T>{
     if(!WRITE_ALLOWED.has(name)||!input||Array.isArray(input)||typeof input!=="object"){
       throw new GoogleMasterClientError("INVALID_ARGUMENTS");
     }

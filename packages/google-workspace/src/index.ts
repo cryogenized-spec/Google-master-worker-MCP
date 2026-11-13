@@ -320,7 +320,7 @@ export function registerWorkspaceServices(registry: OperationRegistry, transport
   // Mutations are built into the core from the outset, but NEVER surfaced
   // remotely without independent, exact-action, one-use trusted approval.
   registry.register(defineOperation({
-    name:"drive_create_folder", description:"Create a Drive folder only with independent write approval.",
+    name:"drive_create_folder", description:"Create a Drive folder with authenticated write scope.",
     inputSchema:z.object({name:z.string().trim().min(1).max(256),
       parentId:id.optional()}).strict(),outputSchema:mutationOutput,
     scopesAnyOf:[scope("drive")],risk:"write",
@@ -333,7 +333,7 @@ export function registerWorkspaceServices(registry: OperationRegistry, transport
     }
   }));
   registry.register(defineOperation({
-    name:"calendar_create_event",description:"Create a Google Calendar event only with independent write approval.",
+    name:"calendar_create_event",description:"Create a Google Calendar event with authenticated write scope.",
     inputSchema:z.object({calendarId:id,summary:z.string().trim().min(1).max(256),
       start:z.iso.datetime({offset:true}),end:z.iso.datetime({offset:true}),
       description:text(4000).optional(),location:text(1024).optional()}).strict(),
@@ -347,7 +347,7 @@ export function registerWorkspaceServices(registry: OperationRegistry, transport
     }
   }));
   registry.register(defineOperation({
-    name:"sheets_update_values",description:"Replace one bounded Sheets range after exact-action write approval.",
+    name:"sheets_update_values",description:"Replace one bounded Sheets range with authenticated write scope.",
     inputSchema:z.object({spreadsheetId:id,range:z.string().min(1).max(128),
       values:z.array(z.array(z.union([z.string().max(4096),z.number(),z.boolean()])).max(30))
         .min(1).max(100)}).strict(),outputSchema:mutationOutput,
@@ -361,7 +361,7 @@ export function registerWorkspaceServices(registry: OperationRegistry, transport
     }
   }));
   registry.register(defineOperation({
-    name:"gmail_create_draft",description:"Create an unsent Gmail draft using encoded RFC 5322 mail, only with trusted approval.",
+    name:"gmail_create_draft",description:"Create an unsent Gmail draft using encoded RFC 5322 mail, with authenticated write scope.",
     inputSchema:z.object({rawBase64Url:z.string().regex(/^[A-Za-z0-9_-]{16,100000}$/)}).strict(),
     outputSchema:mutationOutput,scopesAnyOf:[scope("gmail.compose")],risk:"write",
     async run(input,{session}){
@@ -371,7 +371,7 @@ export function registerWorkspaceServices(registry: OperationRegistry, transport
     }
   }));
   registry.register(defineOperation({
-    name:"gmail_send_message",description:"Send an email externally; requires independently approved exact RFC 5322 message.",
+    name:"gmail_send_message",description:"Send an email externally; sends the specified RFC 5322 message with authenticated write scope.",
     inputSchema:z.object({rawBase64Url:z.string().regex(/^[A-Za-z0-9_-]{16,100000}$/)}).strict(),
     outputSchema:mutationOutput,scopesAnyOf:[scope("gmail.send")],risk:"external",
     async run(input,{session}){

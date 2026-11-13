@@ -99,7 +99,8 @@ export async function handleReadOnlyApi(
   if(!operation) return json({error:"NOT_FOUND"},404);
   if(request.method!=="POST") return json({error:"METHOD_NOT_ALLOWED"},405);
   // When writes are off, fail closed before parsing or Google I/O.
-  // With writes on, the OperationRegistry still demands one-use D1 approval.
+  // With writes on, protected OAuth requires mcp:write, and the registry
+  // enforces strict inputs and per-operation Google grants.
   if(!permitted.some(item=>item.name===operation)){
     return json({error:"UNKNOWN_OPERATION"},404);
   }

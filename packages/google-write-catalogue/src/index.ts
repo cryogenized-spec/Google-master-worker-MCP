@@ -352,7 +352,7 @@ export function registerGoogleWriteCatalogue(
     registry.register(defineOperation({
       name:spec.name,risk:spec.risk,scopesAnyOf:spec.scope,
       description:"Modify "+spec.name.replaceAll("_"," ")+" in connected Google; "+
-        "exact action and full parameters require separate owner approval.",
+        "executes directly with authenticated mcp:write and Google OAuth scope.",
       inputSchema,outputSchema,
       async run(input,{session}){
         const value=input as Record<string,unknown>;

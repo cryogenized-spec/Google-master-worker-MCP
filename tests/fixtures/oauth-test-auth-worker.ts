@@ -11,7 +11,7 @@ export default class TestAuthWorker extends WorkerEntrypoint {
 
   async validateToken(resource: string, token: string) {
     if (resource !== "https://mcp.example.test/mcp" ||
-        !["test-owner-read-token","test-under-scoped-token",
+        !["test-owner-read-token","test-owner-write-token","test-under-scoped-token",
           "test-wrong-audience-token","test-expired-token",
           "test-wrong-owner-token"].includes(token)) return null;
     return {
@@ -19,7 +19,8 @@ export default class TestAuthWorker extends WorkerEntrypoint {
         accountId:"default"},
       audience:token==="test-wrong-audience-token"
         ?"https://unrelated.example.test/mcp":resource,
-      scope:token==="test-under-scoped-token" ? ["offline_access"] : ["mcp:read"],
+      scope:token==="test-under-scoped-token" ? ["offline_access"] :
+        token==="test-owner-write-token" ? ["mcp:read","mcp:write"] : ["mcp:read"],
       clientId:"synthetic-client-id",
       userId:token==="test-wrong-owner-token"?"unknown":"owner",
       expiresAt:Math.floor(Date.now()/1000)+
