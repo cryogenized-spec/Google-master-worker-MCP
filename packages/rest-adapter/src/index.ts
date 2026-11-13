@@ -25,7 +25,8 @@ function jsonError(error: unknown): Response {
   const status = (
     ["INVALID_ARGUMENTS","INVALID_JSON_BODY","INPUT_TOO_LARGE"].includes(payload.error) ? 400 :
     payload.error === "UNKNOWN_OPERATION" ? 404 :
-    ["GOOGLE_SCOPE_MISSING","CLIENT_UNAUTHORIZED","WRITE_APPROVAL_REQUIRED"].includes(payload.error) ? 403 :
+    ["GOOGLE_SCOPE_MISSING","CLIENT_UNAUTHORIZED","WRITE_APPROVAL_REQUIRED",
+      "APPROVAL_ACTION_INVALID","APPROVAL_INPUT_INVALID"].includes(payload.error) ? 403 :
     ["GOOGLE_SESSION_NOT_CONFIGURED","GOOGLE_SESSION_EXPIRED","WORKSPACE_VAULT_NOT_CONFIGURED"].includes(payload.error) ? 503 :
     502
   );
@@ -81,18 +82,25 @@ export function isRestPath(path:string):boolean {
 }
 
 export async function handleReadOnlyApi(
-  request:Request, registry:OperationRegistry, principal:Principal
+  request:Request, registry:OperationRegistry, principal:Principal,
+  options:{writesEnabled?:boolean}={}
 ):Promise<Response> {
+  const permitted=options.writesEnabled
+    ? registry.catalogue().map(item=>({
+        name:item.name,description:item.description,risk:item.risk
+      }))
+    : readOperationCatalogue(registry);
   const path=new URL(request.url).pathname;
   if(path==="/v1/capabilities"){
     if(request.method!=="GET") return json({error:"METHOD_NOT_ALLOWED"},405);
-    return json({operations:readOperationCatalogue(registry)});
+    return json({operations:permitted});
   }
   const operation=OPERATION.exec(path)?.[1];
   if(!operation) return json({error:"NOT_FOUND"},404);
   if(request.method!=="POST") return json({error:"METHOD_NOT_ALLOWED"},405);
-  // A read-only route MUST reject write names before parsing or Google I/O.
-  if(!readOperationCatalogue(registry).some(item=>item.name===operation)){
+  // When writes are off, fail closed before parsing or Google I/O.
+  // With writes on, the OperationRegistry still demands one-use D1 approval.
+  if(!permitted.some(item=>item.name===operation)){
     return json({error:"UNKNOWN_OPERATION"},404);
   }
   if(!/^application\/json(?:\s*;\s*charset=utf-8)?$/i.test(
