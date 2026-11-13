@@ -100,6 +100,9 @@ export class GoogleJsonClient {
       throw new OperationError(code);
     }
 
+    // Google's DELETE, CLEAR and some batch APIs legitimately return 204
+    // with no JSON body; do not misclassify a successful mutation.
+    if (response.status === 204) return {};
     const announced = Number(response.headers?.get("content-length") ?? 0);
     if (announced > this.maxBytes) throw new OperationError("GOOGLE_RESPONSE_TOO_LARGE");
     let bytes: Uint8Array;

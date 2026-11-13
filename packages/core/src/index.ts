@@ -29,7 +29,7 @@ export interface ApprovalGate {
   consume(action: ApprovalAction): Promise<void>;
 }
 
-export type OperationRisk = "read" | "write" | "destructive" | "external";
+export type OperationRisk = "read" | "prepare" | "write" | "destructive" | "external";
 export type OperationContext = {
   readonly principal: Principal;
   readonly session: GoogleSession;
@@ -69,7 +69,7 @@ export function publicError(error: unknown): { error: string } {
 
 export type OperationMetadata = Readonly<Pick<
   Operation<z.ZodTypeAny, z.ZodTypeAny>,
-  "name" | "description" | "inputSchema" | "risk"
+  "name" | "description" | "inputSchema" | "risk" | "scopesAnyOf"
 >>;
 
 export class OperationRegistry {
@@ -94,7 +94,8 @@ export class OperationRegistry {
   catalogue(): readonly OperationMetadata[] {
     return Array.from(this.operations.values(), value => ({
       name: value.name, description: value.description,
-      inputSchema: value.inputSchema, risk: value.risk
+      inputSchema: value.inputSchema, risk: value.risk,
+      scopesAnyOf: value.scopesAnyOf
     }));
   }
 
@@ -126,7 +127,7 @@ export class OperationRegistry {
       throw new OperationError("GOOGLE_SCOPE_MISSING");
     }
 
-    if (operation.risk !== "read") {
+    if (operation.risk !== "read" && operation.risk !== "prepare") {
       if (!this.approvals) throw new OperationError("WRITE_APPROVAL_REQUIRED");
       // Only an independently trusted approval gate may authorize a mutation.
       // User/model inputs cannot issue, extend or confirm approval here.
