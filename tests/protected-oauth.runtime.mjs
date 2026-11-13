@@ -82,7 +82,7 @@ test("service-bound OAuth grants a 24-operation read-only catalogue",async()=>{
   const body=await response.text();
   assert.equal(response.status,200,body);
   const operations=JSON.parse(body).operations;
-  assert.equal(operations.length,95);
+  assert.equal(operations.length,101);
   assert(operations.some(op=>op.name==="gmail_get_message_full"));
   assert(operations.some(op=>op.name==="calendar_query_freebusy"));
   assert(operations.some(op=>op.name==="gmail_list_messages"));
