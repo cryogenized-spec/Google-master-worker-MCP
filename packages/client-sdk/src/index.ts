@@ -83,7 +83,13 @@ export const READ_OPERATION_NAMES = [
   "meet_list_smart_notes",
   "meet_list_members",
   "meet_get_member",
-  "calendar_query_freebusy"
+  "calendar_query_freebusy",
+  "drive_get_comment_reply",
+  "calendar_get_calendar_list_entry",
+  "gmail_get_attachment",
+  "meet_get_participant_session",
+  "meet_get_smart_note",
+  "meet_get_transcript_entry"
 ] as const;
 
 export type ReadOperationName = typeof READ_OPERATION_NAMES[number];
