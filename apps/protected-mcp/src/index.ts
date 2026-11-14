@@ -142,8 +142,7 @@ export function createProtectedResource(env: ProtectedEnv) {
     resourceMetadata: {
       resource: env.MCP_RESOURCE_URL,
       authorization_servers: [env.AUTH_ISSUER],
-      resource_name: "Google Master Worker (private)",
-      scopes_supported: ["mcp:read","mcp:write"]
+      resource_name: "Google Master Worker (private)"
     },
     // The resource-wide gate only requires read access. Individual write
     // tools publish their stronger OAuth permission and handle upgrades.
