@@ -187,12 +187,15 @@ test("insufficient client scopes produce a 403 challenge with requested scope",a
 });
 
 
-test("write-enabled MCP requires one-time mcp:write OAuth grant, not mere mcp:read",async()=>{
+test("M25 write-enabled MCP accepts mcp:read token for safe reads and advertises 191 tools",async()=>{
   const readToken=await writeWorker.fetch(origin+"/v1/capabilities",{
     headers:{Authorization:"Bearer test-owner-read-token"}
   });
-  assert.equal(readToken.status,403);
-  assert.match(readToken.headers.get("WWW-Authenticate")||"",/mcp:write/);
+  assert.equal(readToken.status,200);
+  const readCatalogue=await readToken.json();
+  assert.equal(readCatalogue.operations.length,101);
+  assert(readCatalogue.operations.every(x=>x.risk==="read"));
+
   const permitted=await writeWorker.fetch(origin+"/v1/capabilities",{
     headers:{Authorization:"Bearer test-owner-write-token"}
   });
@@ -204,7 +207,19 @@ test("write-enabled MCP requires one-time mcp:write OAuth grant, not mere mcp:re
   assert(!result.operations.some(x=>x.name==="write_prepare_action"));
 });
 
-test("write-scoped owner token reaches direct write path without approval page",async()=>{
+test("M25 read-only OAuth token cannot call write REST operation; scope challenge points to mcp:write",async()=>{
+  const resp=await writeWorker.fetch(origin+"/v1/operations/drive_copy_file",{
+    method:"POST",headers:{
+      Authorization:"Bearer test-owner-read-token",
+      "Content-Type":"application/json"
+    },body:JSON.stringify({fileId:"fake-file",name:"No mutation"})
+  });
+  assert.equal(resp.status,403);
+  assert.match(resp.headers.get("WWW-Authenticate")||"",/mcp:write/);
+  assert.deepEqual(await resp.json(),{error:"INSUFFICIENT_SCOPE"});
+});
+
+test("M25 write-scoped owner token reaches direct write path without approval page",async()=>{
   const resp=await writeWorker.fetch(origin+"/v1/operations/drive_copy_file",{
     method:"POST",headers:{
       Authorization:"Bearer test-owner-write-token",
@@ -212,7 +227,46 @@ test("write-scoped owner token reaches direct write path without approval page",
     },body:JSON.stringify({fileId:"fake-file",name:"Synthetic copy"})
   });
   // No Google vault in the offline harness; the call is validated and
-  // reaches the Google-session boundary rather than a write-approval gate.
+  // reaches Google-session boundary rather than a write-approval gate.
   assert.equal(resp.status,503);
   assert.deepEqual(await resp.json(),{error:"GOOGLE_SESSION_NOT_CONFIGURED"});
+});
+
+
+test("M25 workerd exposes per-tool read/write OAuth scopes on the actual MCP transport",async()=>{
+  const req={
+    method:"POST",
+    headers:{
+      Authorization:"Bearer test-owner-read-token",
+      "Content-Type":"application/json",
+      Accept:"application/json, text/event-stream",
+      "MCP-Protocol-Version":"2026-07-28",
+      "Mcp-Method":"tools/list"
+    },
+    body:JSON.stringify({jsonrpc:"2.0",id:99,method:"tools/list",
+      params:{_meta:{
+        "io.modelcontextprotocol/protocolVersion":"2026-07-28",
+        "io.modelcontextprotocol/clientCapabilities":{},
+        "io.modelcontextprotocol/clientInfo":{name:"workerd-oauth-test",version:"1.0"}
+      }}})
+  };
+  const response=await writeWorker.fetch(origin+"/mcp",req);
+  const data=await response.text();
+  assert.equal(response.status,200,data);
+  const parsed=JSON.parse(data);
+  const tools=parsed.result?.tools;
+  assert.equal(tools?.length,191);
+  assert.deepEqual(tools.find(t=>t.name==="tasks_list_tasklists").securitySchemes,
+    [{type:"oauth2",scopes:["mcp:read"]}]);
+  assert.deepEqual(tools.find(t=>t.name==="tasks_create_task").securitySchemes,
+    [{type:"oauth2",scopes:["mcp:read","mcp:write"]}]);
+});
+
+test("M25 OAuth protected resource advertises write scope without requiring it for reads",async()=>{
+  const response=await writeWorker.fetch(origin+"/.well-known/oauth-protected-resource/mcp");
+  const body=await response.text();
+  assert.equal(response.status,200,body);
+  const metadata=JSON.parse(body);
+  assert.deepEqual(metadata.scopes_supported,["mcp:read"]);
+  assert.equal(metadata.resource,resource);
 });
