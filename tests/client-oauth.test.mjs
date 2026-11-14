@@ -9,7 +9,7 @@ import { registerAppsScript } from "../dist/packages/google-apps-script/src/inde
 import { registerWorkspaceServices } from "../dist/packages/google-workspace/src/index.js";
 import { registerGoogleReadCatalogue } from "../dist/packages/google-read-catalogue/src/index.js";
 import { registerGoogleWriteCatalogue } from "../dist/packages/google-write-catalogue/src/index.js";
-import { createMcpServer } from "../dist/packages/mcp-adapter/src/index.js";
+import { createMcpServer, withOAuthToolSchemes } from "../dist/packages/mcp-adapter/src/index.js";
 
 const login = {
   clientId: "1234567890-example.apps.googleusercontent.com",
@@ -183,7 +183,7 @@ test("M25 advertises distinct oauth2 security schemes per read/write tool and pr
           "io.modelcontextprotocol/clientInfo":{name:"scope-test",version:"1.0"}
         }}})
     });
-    const response=await handler.fetch(request);
+    const response=await withOAuthToolSchemes(request,r=>handler.fetch(r),registry);
     const body=await response.text();
     assert.equal(response.status,200,body);
     return JSON.parse(body).result;
