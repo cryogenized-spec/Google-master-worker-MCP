@@ -5,7 +5,7 @@ import {
 import { WorkerEntrypoint } from "cloudflare:workers";
 import { encodeBase64Url, sha256Url } from "../../../packages/google-auth/src/crypto.js";
 import { verifyGoogleLogin, validLoginConfig } from "../../../packages/client-oauth/src/google-identity.js";
-import { renderConsent } from "../../../packages/client-oauth/src/html.js";
+import { ownerConsentScopes, renderConsent } from "../../../packages/client-oauth/src/html.js";
 
 interface AuthEnv {
   AUTH_RATE_LIMITER: {limit(input: {key: string}): Promise<{success: boolean}>};
@@ -78,7 +78,16 @@ async function startAuthorization(req: Request, env: AuthEnv): Promise<Response>
   // Set state cookie and frame-denying headers before drawing any client-controlled content.
   const consent = await oauth.beginConsent(request);
   consent.headers.set("Content-Type","text/html; charset=utf-8");
-  return new Response(renderConsent(description, consent.handle), {
+  // ChatGPT's initial connection requests only mcp:read. Offer the owner an
+  // explicit OPTIONAL write scope on the consent page instead of hiding it.
+  // Cloudflare's approveConsent() accepts owner-selected extra scopes as long
+  // as they are in scopesSupported. The selected grant is persisted with the
+  // signed OAuth transaction and subject to owner login verification.
+  const offered = {
+    ...description,
+    scope: ownerConsentScopes(description.scope)
+  };
+  return new Response(renderConsent(offered, consent.handle, description.scope), {
     status: 200, headers: consent.headers
   });
 }

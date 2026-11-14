@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { verifyGoogleLogin, validLoginConfig } from "../dist/packages/client-oauth/src/google-identity.js";
-import { escapeHtml, renderConsent } from "../dist/packages/client-oauth/src/html.js";
+import { escapeHtml, renderConsent, ownerConsentScopes } from "../dist/packages/client-oauth/src/html.js";
 import { createMcpHandler } from "@modelcontextprotocol/server";
 import { OperationRegistry } from "../dist/packages/core/src/index.js";
 import { registerGoogleTasks } from "../dist/packages/google-tasks/src/index.js";
@@ -110,6 +110,36 @@ test("consent HTML escapes hostile client names, domains, handles and scopes", (
   assert.equal(escapeHtml("&<>"),"&#38;&#60;&#62;");
 });
 
+
+test("M26 one-time consent offers explicit optional mcp:write when ChatGPT requests only mcp:read", () => {
+  const requested=["mcp:read"];
+  const offered=ownerConsentScopes(requested);
+  assert.deepEqual(offered,["mcp:read","mcp:write"]);
+  const consent=renderConsent({
+    clientName:"ChatGPT",
+    clientDomain:"chatgpt.com",
+    redirectHost:"chatgpt.com",
+    redirectIsLoopback:false,
+    scope:offered
+  },"opaque-handle",requested);
+  assert.match(consent, /value="mcp:read" checked/);
+  assert.match(consent, /value="mcp:write">/);
+  assert.doesNotMatch(consent, /value="mcp:write" checked/);
+  assert.match(consent, /Create, edit, send, share or delete Google data/);
+  assert.match(consent, /no separate approval page/);
+  assert.equal((consent.match(/value="mcp:write"/g)||[]).length,1);
+});
+
+test("M26 requested mcp:write remains checked but is never duplicated", () => {
+  const both=ownerConsentScopes(["mcp:read","mcp:write","offline_access"]);
+  assert.deepEqual(both,["mcp:read","mcp:write","offline_access"]);
+  const html=renderConsent({
+    clientName:"Owner client",clientDomain:"example.test",redirectHost:"example.test",
+    redirectIsLoopback:false,scope:both
+  },"opaque",both);
+  assert.match(html, /value="mcp:write" checked/);
+  assert.equal((html.match(/value="mcp:write"/g)||[]).length,1);
+});
 
 test("remote MCP adapter exposes broad read tools but no mutations", async () => {
   const registry = new OperationRegistry({ async get() { return null; } });

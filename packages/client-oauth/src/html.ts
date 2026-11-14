@@ -4,16 +4,32 @@ export function escapeHtml(text: string): string {
   return text.replace(/[&<>"']/g, c => "&#" + c.charCodeAt(0) + ";");
 }
 
+/** Include the optional owner write grant even when the MCP client initially
+ * requests only mcp:read. The operator must explicitly tick that additional
+ * permission; no authorization is silently added to a token.
+ */
+export function ownerConsentScopes(requested: readonly string[]): string[] {
+  return Array.from(new Set([...requested, "mcp:write"]));
+}
+
 /** Interpolate exclusively escaped client-controlled strings. */
-export function renderConsent(details: ConsentDescription, handle: string): string {
+export function renderConsent(
+  details: ConsentDescription, handle: string,
+  requestedScopes: readonly string[] = details.scope
+): string {
   const name = escapeHtml(details.clientName);
   const domain = details.clientDomain
     ? "Verified client domain: " + escapeHtml(details.clientDomain)
     : "The app name is self-reported and not verified.";
-  const scopeOptions = details.scope.map(scope =>
-    '<label><input type="checkbox" name="scope" value="' + escapeHtml(scope) +
-    '" checked> ' + escapeHtml(scope) + '</label>'
-  ).join("\n");
+  const scopeOptions = details.scope.map(scope => {
+    const requested = requestedScopes.includes(scope);
+    const label = scope === "mcp:write"
+      ? " — Create, edit, send, share or delete Google data"
+      : "";
+    return '<label><input type="checkbox" name="scope" value="' + escapeHtml(scope) +
+      '"' + (requested ? " checked" : "") + '> ' + escapeHtml(scope) +
+      escapeHtml(label) + '</label>';
+  }).join("\n");
   const localWarning = details.redirectIsLoopback
     ? "<p><strong>Local application:</strong> approve only if you started this login.</p>"
     : "";
@@ -30,7 +46,10 @@ export function renderConsent(details: ConsentDescription, handle: string): stri
     '<strong>', escapeHtml(details.redirectHost), '</strong>.</p>',
     localWarning, '<form method="post" action="/authorize">',
     '<input type="hidden" name="handle" value="', escapeHtml(handle), '">',
-    '<p><strong>Requested permissions</strong></p>', scopeOptions,
+    '<p><strong>Permissions for this connection</strong></p>', scopeOptions,
+    '<p><small>Write access is optional. Enable mcp:write once to use direct ',
+    'Google Master MCP actions; no separate approval page is needed for each action.',
+    '</small></p>',
     '<p><button type="submit" name="decision" value="approve">Allow selected</button>',
     '<button type="submit" name="decision" value="deny">Deny</button></p></form>',
     '<p><small>This client authorization does not connect your Google Workspace data.',
