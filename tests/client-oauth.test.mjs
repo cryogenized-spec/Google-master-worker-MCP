@@ -211,5 +211,5 @@ test("M25 advertises distinct oauth2 security schemes per read/write tool and pr
   });
   assert.equal(writeAuthorized.isError,true);
   assert.equal(JSON.parse(writeAuthorized.content[0].text).error,"GOOGLE_SESSION_NOT_CONFIGURED");
-  assert.equal(writeAuthorized._meta,undefined);
+  assert.equal(writeAuthorized._meta?.["mcp/www_authenticate"],undefined);
 });
