@@ -175,7 +175,8 @@ test("M25 advertises distinct oauth2 security schemes per read/write tool and pr
         "Content-Type":"application/json",
         Accept:"application/json, text/event-stream",
         "MCP-Protocol-Version":"2026-07-28",
-        "Mcp-Method":method
+        "Mcp-Method":method,
+        ...(method==="tools/call"?{"Mcp-Name":params.name}:{})
       },body:JSON.stringify({jsonrpc:"2.0",id:1,method,
         params:{...params,_meta:{
           "io.modelcontextprotocol/protocolVersion":"2026-07-28",
