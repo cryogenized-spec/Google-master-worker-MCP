@@ -187,12 +187,15 @@ test("insufficient client scopes produce a 403 challenge with requested scope",a
 });
 
 
-test("write-enabled MCP requires one-time mcp:write OAuth grant, not mere mcp:read",async()=>{
+test("M25 write-enabled MCP accepts mcp:read token for safe reads and advertises 191 tools",async()=>{
   const readToken=await writeWorker.fetch(origin+"/v1/capabilities",{
     headers:{Authorization:"Bearer test-owner-read-token"}
   });
-  assert.equal(readToken.status,403);
-  assert.match(readToken.headers.get("WWW-Authenticate")||"",/mcp:write/);
+  assert.equal(readToken.status,200);
+  const readCatalogue=await readToken.json();
+  assert.equal(readCatalogue.operations.length,101);
+  assert(readCatalogue.operations.every(x=>x.risk==="read"));
+
   const permitted=await writeWorker.fetch(origin+"/v1/capabilities",{
     headers:{Authorization:"Bearer test-owner-write-token"}
   });
@@ -204,7 +207,19 @@ test("write-enabled MCP requires one-time mcp:write OAuth grant, not mere mcp:re
   assert(!result.operations.some(x=>x.name==="write_prepare_action"));
 });
 
-test("write-scoped owner token reaches direct write path without approval page",async()=>{
+test("M25 read-only OAuth token cannot call write REST operation; scope challenge points to mcp:write",async()=>{
+  const resp=await writeWorker.fetch(origin+"/v1/operations/drive_copy_file",{
+    method:"POST",headers:{
+      Authorization:"Bearer test-owner-read-token",
+      "Content-Type":"application/json"
+    },body:JSON.stringify({fileId:"fake-file",name:"No mutation"})
+  });
+  assert.equal(resp.status,403);
+  assert.match(resp.headers.get("WWW-Authenticate")||"",/mcp:write/);
+  assert.deepEqual(await resp.json(),{error:"INSUFFICIENT_SCOPE"});
+});
+
+test("M25 write-scoped owner token reaches direct write path without approval page",async()=>{
   const resp=await writeWorker.fetch(origin+"/v1/operations/drive_copy_file",{
     method:"POST",headers:{
       Authorization:"Bearer test-owner-write-token",
@@ -212,7 +227,7 @@ test("write-scoped owner token reaches direct write path without approval page",
     },body:JSON.stringify({fileId:"fake-file",name:"Synthetic copy"})
   });
   // No Google vault in the offline harness; the call is validated and
-  // reaches the Google-session boundary rather than a write-approval gate.
+  // reaches Google-session boundary rather than a write-approval gate.
   assert.equal(resp.status,503);
   assert.deepEqual(await resp.json(),{error:"GOOGLE_SESSION_NOT_CONFIGURED"});
 });
