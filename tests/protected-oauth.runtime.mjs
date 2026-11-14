@@ -244,7 +244,11 @@ test("M25 workerd exposes per-tool read/write OAuth scopes on the actual MCP tra
       "Mcp-Method":"tools/list"
     },
     body:JSON.stringify({jsonrpc:"2.0",id:99,method:"tools/list",
-      params:{_meta:{"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}})
+      params:{_meta:{
+        "io.modelcontextprotocol/protocolVersion":"2026-07-28",
+        "io.modelcontextprotocol/clientCapabilities":{},
+        "io.modelcontextprotocol/clientInfo":{name:"workerd-oauth-test",version:"1.0"}
+      }}})
   };
   const response=await writeWorker.fetch(origin+"/mcp",req);
   const data=await response.text();
