@@ -8,6 +8,7 @@ import { registerGoogleTasks } from "../dist/packages/google-tasks/src/index.js"
 import { registerAppsScript } from "../dist/packages/google-apps-script/src/index.js";
 import { registerWorkspaceServices } from "../dist/packages/google-workspace/src/index.js";
 import { registerGoogleReadCatalogue } from "../dist/packages/google-read-catalogue/src/index.js";
+import { registerGoogleWriteCatalogue } from "../dist/packages/google-write-catalogue/src/index.js";
 import { createMcpServer } from "../dist/packages/mcp-adapter/src/index.js";
 
 const login = {
@@ -151,4 +152,60 @@ test("remote MCP adapter exposes broad read tools but no mutations", async () =>
   assert(names.includes("script_get_project"));
   assert(names.includes("tasks_list_tasks"));
   assert(!names.some(name=>name.includes("_create") || name.includes("_update")));
+});
+
+
+test("M25 advertises distinct oauth2 security schemes per read/write tool and prompts incremental auth",async()=>{
+  const registry=new OperationRegistry({async get(){return null;}}, "direct");
+  registerGoogleReadCatalogue(registry);
+  registerGoogleWriteCatalogue(registry);
+  const base="https://mcp.example.test";
+  const metadata=base+"/.well-known/oauth-protected-resource/mcp";
+  const makeHandler=grantedScopes=>createMcpHandler(()=>createMcpServer(
+    registry, async()=>({
+      authenticated:true,clientId:"mcp_"+"a".repeat(48),accountId:"default"
+    }),{oauth:{grantedScopes,resourceMetadataUrl:metadata}}
+  ),{legacy:"stateless"});
+  const send=async (handler,method,params={})=>{
+    const request=new Request(base+"/mcp",{
+      method:"POST",headers:{
+        "Content-Type":"application/json",
+        Accept:"application/json, text/event-stream",
+        "MCP-Protocol-Version":"2026-07-28",
+        "Mcp-Method":method
+      },body:JSON.stringify({jsonrpc:"2.0",id:1,method,
+        params:{...params,_meta:{
+          "io.modelcontextprotocol/protocolVersion":"2026-07-28",
+          "io.modelcontextprotocol/clientCapabilities":{},
+          "io.modelcontextprotocol/clientInfo":{name:"scope-test",version:"1.0"}
+        }}})
+    });
+    const response=await handler.fetch(request);
+    const body=await response.text();
+    assert.equal(response.status,200,body);
+    return JSON.parse(body).result;
+  };
+  const readHandler=makeHandler(["mcp:read"]);
+  const catalogue=await send(readHandler,"tools/list");
+  assert.equal(catalogue.tools.length,182);
+  const readTool=catalogue.tools.find(x=>x.name==="docs_get_document");
+  const writeTool=catalogue.tools.find(x=>x.name==="drive_copy_file");
+  assert.deepEqual(readTool.securitySchemes,[{type:"oauth2",scopes:["mcp:read"]}]);
+  assert.deepEqual(writeTool.securitySchemes,[{type:"oauth2",scopes:["mcp:read","mcp:write"]}]);
+  const blocked=await send(readHandler,"tools/call",{
+    name:"drive_copy_file",arguments:{fileId:"harmless",name:"not created"}
+  });
+  assert.equal(blocked.isError,true);
+  assert.equal(JSON.parse(blocked.content[0].text).error,"OAUTH_SCOPE_UPGRADE_REQUIRED");
+  assert.equal(blocked._meta["mcp/www_authenticate"].length,1);
+  assert.match(blocked._meta["mcp/www_authenticate"][0],/error="insufficient_scope"/);
+  assert.match(blocked._meta["mcp/www_authenticate"][0],/scope="mcp:read mcp:write"/);
+  assert(blocked._meta["mcp/www_authenticate"][0].includes(metadata));
+  const writeHandler=makeHandler(["mcp:read","mcp:write"]);
+  const writeAuthorized=await send(writeHandler,"tools/call",{
+    name:"drive_copy_file",arguments:{fileId:"harmless",name:"not created"}
+  });
+  assert.equal(writeAuthorized.isError,true);
+  assert.equal(JSON.parse(writeAuthorized.content[0].text).error,"GOOGLE_SESSION_NOT_CONFIGURED");
+  assert.equal(writeAuthorized._meta,undefined);
 });
