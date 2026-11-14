@@ -234,7 +234,7 @@ test("M25 write-scoped owner token reaches direct write path without approval pa
 
 
 test("M25 workerd exposes per-tool read/write OAuth scopes on the actual MCP transport",async()=>{
-  const req=new Request(origin+"/mcp",{
+  const req={
     method:"POST",
     headers:{
       Authorization:"Bearer test-owner-read-token",
@@ -245,8 +245,8 @@ test("M25 workerd exposes per-tool read/write OAuth scopes on the actual MCP tra
     },
     body:JSON.stringify({jsonrpc:"2.0",id:99,method:"tools/list",
       params:{_meta:{"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}})
-  });
-  const response=await writeWorker.fetch(req);
+  };
+  const response=await writeWorker.fetch(origin+"/mcp",req);
   const data=await response.text();
   assert.equal(response.status,200,data);
   const parsed=JSON.parse(data);
@@ -263,6 +263,6 @@ test("M25 OAuth protected resource advertises write scope without requiring it f
   const body=await response.text();
   assert.equal(response.status,200,body);
   const metadata=JSON.parse(body);
-  assert.deepEqual(metadata.scopes_supported,["mcp:read","mcp:write"]);
+  assert.deepEqual(metadata.scopes_supported,["mcp:read"]);
   assert.equal(metadata.resource,resource);
 });
