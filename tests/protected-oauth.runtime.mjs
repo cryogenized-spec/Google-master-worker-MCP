@@ -231,3 +231,38 @@ test("M25 write-scoped owner token reaches direct write path without approval pa
   assert.equal(resp.status,503);
   assert.deepEqual(await resp.json(),{error:"GOOGLE_SESSION_NOT_CONFIGURED"});
 });
+
+
+test("M25 workerd exposes per-tool read/write OAuth scopes on the actual MCP transport",async()=>{
+  const req=new Request(origin+"/mcp",{
+    method:"POST",
+    headers:{
+      Authorization:"Bearer test-owner-read-token",
+      "Content-Type":"application/json",
+      Accept:"application/json, text/event-stream",
+      "MCP-Protocol-Version":"2026-07-28",
+      "Mcp-Method":"tools/list"
+    },
+    body:JSON.stringify({jsonrpc:"2.0",id:99,method:"tools/list",
+      params:{_meta:{"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}})
+  });
+  const response=await writeWorker.fetch(req);
+  const data=await response.text();
+  assert.equal(response.status,200,data);
+  const parsed=JSON.parse(data);
+  const tools=parsed.result?.tools;
+  assert.equal(tools?.length,191);
+  assert.deepEqual(tools.find(t=>t.name==="tasks_list_tasklists").securitySchemes,
+    [{type:"oauth2",scopes:["mcp:read"]}]);
+  assert.deepEqual(tools.find(t=>t.name==="tasks_create_task").securitySchemes,
+    [{type:"oauth2",scopes:["mcp:read","mcp:write"]}]);
+});
+
+test("M25 OAuth protected resource advertises write scope without requiring it for reads",async()=>{
+  const response=await writeWorker.fetch(origin+"/.well-known/oauth-protected-resource/mcp");
+  const body=await response.text();
+  assert.equal(response.status,200,body);
+  const metadata=JSON.parse(body);
+  assert.deepEqual(metadata.scopes_supported,["mcp:read","mcp:write"]);
+  assert.equal(metadata.resource,resource);
+});
