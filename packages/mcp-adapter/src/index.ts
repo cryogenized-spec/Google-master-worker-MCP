@@ -38,7 +38,7 @@ export function createMcpServer(
         destructiveHint: definition.risk === "destructive",
         idempotentHint: definition.risk === "read"
       }
-    }, async (args: any) => {
+    } as any, async (args: any) => {
       if(options.oauth && requiredScopes.some(s => !options.oauth!.grantedScopes.includes(s))){
         // OAuth discovery + tool securitySchemes alone are insufficient for
         // incremental auth. ChatGPT requires mcp/www_authenticate in the
