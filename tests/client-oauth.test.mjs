@@ -157,6 +157,9 @@ test("remote MCP adapter exposes broad read tools but no mutations", async () =>
 
 test("M25 advertises distinct oauth2 security schemes per read/write tool and prompts incremental auth",async()=>{
   const registry=new OperationRegistry({async get(){return null;}}, "direct");
+  registerGoogleTasks(registry);
+  registerAppsScript(registry);
+  registerWorkspaceServices(registry);
   registerGoogleReadCatalogue(registry);
   registerGoogleWriteCatalogue(registry);
   const base="https://mcp.example.test";
@@ -187,7 +190,7 @@ test("M25 advertises distinct oauth2 security schemes per read/write tool and pr
   };
   const readHandler=makeHandler(["mcp:read"]);
   const catalogue=await send(readHandler,"tools/list");
-  assert.equal(catalogue.tools.length,182);
+  assert.equal(catalogue.tools.length,191);
   const readTool=catalogue.tools.find(x=>x.name==="docs_get_document");
   const writeTool=catalogue.tools.find(x=>x.name==="drive_copy_file");
   assert.deepEqual(readTool.securitySchemes,[{type:"oauth2",scopes:["mcp:read"]}]);
