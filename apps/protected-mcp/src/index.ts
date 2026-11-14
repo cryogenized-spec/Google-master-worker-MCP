@@ -9,7 +9,7 @@ import { registerAppsScript } from "../../../packages/google-apps-script/src/ind
 import { registerWorkspaceServices } from "../../../packages/google-workspace/src/index.js";
 import { registerGoogleReadCatalogue } from "../../../packages/google-read-catalogue/src/index.js";
 import { registerGoogleWriteCatalogue } from "../../../packages/google-write-catalogue/src/index.js";
-import { createMcpServer } from "../../../packages/mcp-adapter/src/index.js";
+import { createMcpServer, withOAuthToolSchemes } from "../../../packages/mcp-adapter/src/index.js";
 import { handleReadOnlyApi, isRestPath, restPreflight, corsOrigin, corsResponse } from "../../../packages/rest-adapter/src/index.js";
 import { createWorkspaceReadSessionStore, scopedMcpClientId, type WorkspaceVaultEnv } from "../../../packages/google-auth/src/worker-session.js";
 
@@ -190,7 +190,7 @@ export function createProtectedResource(env: ProtectedEnv) {
           }),
           {legacy: "stateless"}
         );
-        return handler.fetch(request);
+        return withOAuthToolSchemes(request,r=>handler.fetch(r),registry);
       }
     }
   });
