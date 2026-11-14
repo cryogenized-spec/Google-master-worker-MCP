@@ -96,8 +96,9 @@ async function protectedReadApi(
       !auth.clientId || typeof auth.clientId !== "string") {
     return bearerChallenge(env, "invalid_token");
   }
-  if (!Array.isArray(auth.scope) || !auth.scope.includes("mcp:read") ||
-      (env.GMW_WRITES_ENABLED==="true" && !auth.scope.includes("mcp:write"))) {
+  // A read-only token must still be able to list and use read operations.
+  // Write tools independently require mcp:write, without a new Google vault login.
+  if (!Array.isArray(auth.scope) || !auth.scope.includes("mcp:read")) {
     return bearerChallenge(env, "insufficient_scope", 403);
   }
   if (auth.userId !== "owner" ||
@@ -125,8 +126,14 @@ async function protectedReadApi(
       }
     });
   }
+  const operation=/^\/v1\/operations\/([a-z][a-z0-9_]{0,95})$/.exec(
+    new URL(request.url).pathname)?.[1];
+  if(env.GMW_WRITES_ENABLED==="true" && !auth.scope.includes("mcp:write") &&
+     operation && registry.catalogue().some(meta=>meta.name===operation && meta.risk!=="read")){
+    return bearerChallenge(env,"insufficient_scope",403);
+  }
   return handleReadOnlyApi(request, registry, principal,
-    {writesEnabled:env.GMW_WRITES_ENABLED==="true"});
+    {writesEnabled:env.GMW_WRITES_ENABLED==="true" && auth.scope.includes("mcp:write")});
 }
 
 /** Owner OAuth resource: writes require a one-time client mcp:write grant. */
@@ -135,17 +142,17 @@ export function createProtectedResource(env: ProtectedEnv) {
     resourceMetadata: {
       resource: env.MCP_RESOURCE_URL,
       authorization_servers: [env.AUTH_ISSUER],
-      resource_name: "Google Master Worker (private)"
+      resource_name: "Google Master Worker (private)",
+      scopes_supported: ["mcp:read","mcp:write"]
     },
-    requiredScopes: env.GMW_WRITES_ENABLED==="true"
-      ? ["mcp:read","mcp:write"] : ["mcp:read"],
+    // The resource-wide gate only requires read access. Individual write
+    // tools publish their stronger OAuth permission and handle upgrades.
+    requiredScopes: ["mcp:read"],
     validateToken: env => env.AUTH_SERVER.validateToken,
     handler: {
       async fetch(request, _env, ctx) {
-        const required=_env.GMW_WRITES_ENABLED==="true"
-          ? ["mcp:read","mcp:write"] : ["mcp:read"];
-        if (required.some(scope => !ctx.auth.scope.includes(scope))) {
-          return insufficientScope(ctx.auth, required);
+        if (!ctx.auth.scope.includes("mcp:read")) {
+          return insufficientScope(ctx.auth, ["mcp:read"]);
         }
         // The auth server must have independently verified the allowed Google sub.
         if (ctx.props.userId !== "owner" || ctx.props.accountId !== "default" ||
@@ -172,8 +179,15 @@ export function createProtectedResource(env: ProtectedEnv) {
           });
         }
         const handler = createMcpHandler(
-          () => createMcpServer(registry, async () => principal,
-            {readOnly: _env.GMW_WRITES_ENABLED!=="true"}),
+          () => createMcpServer(registry, async () => principal, {
+            readOnly: _env.GMW_WRITES_ENABLED!=="true",
+            oauth: {
+              grantedScopes:ctx.auth.scope,
+              resourceMetadataUrl:
+                new URL("/.well-known/oauth-protected-resource/mcp",
+                  _env.MCP_RESOURCE_URL).toString()
+            }
+          }),
           {legacy: "stateless"}
         );
         return handler.fetch(request);
